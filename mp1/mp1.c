@@ -6,11 +6,13 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
+#include <linux/kthread.h>
 #include <asm/cputime.h>
 #include <asm/uaccess.h>
 
 #define DIR_NAME "mp1"
 #define FILE_NAME "status"
+#define THREAD_NAME "task-stats-collector"
 #define MAX_PID_DIGITS 11 //TODO: derive from pid_t?
 
 struct task_stats {
@@ -20,21 +22,27 @@ struct task_stats {
 };
 
 static struct task_stats *create_task_stats(pid_t pid);
-static struct task_stats *find_task_stats(pid_t pid);
+static struct task_stats *_find_task_stats(pid_t pid);
 static pid_t ustr_to_pid(const char __user *buffer, unsigned long count);
 int tsm_write_proc(struct file *file, const char __user *buffer,
 			   unsigned long count, void *data);
 int tsm_read_proc(char *page, char **start, off_t off,
 			int count, int *eof, void *data);
+static int stats_collector(void *data);
 
 // proc directory stats file
 static struct proc_dir_entry *stats_file;
 // stats list
 static LIST_HEAD(stats_head);
+// stats mutex
+static DEFINE_MUTEX(stats_mutex);
+// kernel thread struct
+static struct task_struct *stats_thread;
 
 /**
  * initializes resources used by this module:
- *  - proc file structure
+ *  - proc files
+ *  - stats thread
  */
 static int tsm_init(void)
 {
@@ -54,6 +62,14 @@ static int tsm_init(void)
 	// set proc functions
 	stats_file->read_proc = tsm_read_proc;
 	stats_file->write_proc = tsm_write_proc;
+	// start kernel thread
+	stats_thread = kthread_run(stats_collector, NULL, THREAD_NAME);
+	if (IS_ERR(stats_thread)) {
+		printk(KERN_ERR "failed to create kernel thread %s\n", THREAD_NAME);
+		remove_proc_entry(FILE_NAME, dir);
+		remove_proc_entry(DIR_NAME, NULL);
+		return PTR_ERR(stats_thread);
+	}
 	return 0;
 }
 
@@ -64,19 +80,21 @@ static void tsm_exit(void)
 {
 	struct list_head *ptr, *tmp;
 	struct task_stats *stats;
-	struct proc_dir_entry *dir;
 	// remove proc directory and file
-	dir = stats_file->parent;
-	if (stats_file)
-		remove_proc_entry(FILE_NAME, dir);
-	if (dir)
+	if (stats_file) {
+		remove_proc_entry(FILE_NAME, stats_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
+	}
+	// stop kernel thread
+	kthread_stop(stats_thread);
 	// free stats list
+	mutex_lock(&stats_mutex);
 	list_for_each_safe(ptr, tmp, &stats_head) {
 		stats = list_entry(ptr, struct task_stats, list);
 		list_del(ptr);
 		kfree(stats);
 	}
+	mutex_unlock(&stats_mutex);
 }
 
 /**
@@ -96,10 +114,14 @@ int tsm_write_proc(struct file *file, const char __user *buffer,
 		return -1;
 	}
 	// register task stats if not already present
-	if (find_task_stats(pid))
-		return 0;
-	stats = create_task_stats(pid);
-	list_add_tail(&stats->list, &stats_head);
+	mutex_lock(&stats_mutex);
+	if (!_find_task_stats(pid)) {
+		stats = create_task_stats(pid);
+		list_add_tail(&stats->list, &stats_head);
+		mutex_unlock(&stats_mutex);
+	} else {
+		mutex_unlock(&stats_mutex);
+	}
 	return count;
 }
 
@@ -112,8 +134,10 @@ int tsm_read_proc(char *page, char **start, off_t off,
 {
 	char *ptr = page;
 	struct task_stats *stats;
+	mutex_lock(&stats_mutex);
 	list_for_each_entry(stats, &stats_head, list)
 		ptr += sprintf(ptr, "%d: %ld\n", stats->pid, stats->utime);
+	mutex_unlock(&stats_mutex);
 	return ptr - page;
 }
 
@@ -154,7 +178,7 @@ static struct task_stats *create_task_stats(pid_t pid)
  * or NULL if not present
  * @pid:   the pid of the task_stats to return
  */
-static struct task_stats *find_task_stats(pid_t pid)
+static struct task_stats *_find_task_stats(pid_t pid)
 {
 	struct task_stats *stats;
 	list_for_each_entry(stats, &stats_head, list) {
@@ -162,6 +186,31 @@ static struct task_stats *find_task_stats(pid_t pid)
 			return stats;
 	}
 	return NULL;
+}
+
+static int stats_collector(void *data)
+{
+	struct task_stats *stats;
+	struct task_struct *task;
+	unsigned long timeout;
+	timeout = msecs_to_jiffies(5000);
+	while (1) {
+		__set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(timeout);
+		if (kthread_should_stop())
+			break;
+		mutex_lock(&stats_mutex);
+	        list_for_each_entry(stats, &stats_head, list) {
+			// TODO replace with include
+			rcu_read_lock();
+			task=pid_task(find_vpid(stats->pid), PIDTYPE_PID);
+			if (task!=NULL)
+				stats->utime = task->utime;
+			rcu_read_unlock();
+		}
+		mutex_unlock(&stats_mutex);
+	}
+	return 0;
 }
 
 module_init(tsm_init);
