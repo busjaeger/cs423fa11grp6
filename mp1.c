@@ -44,6 +44,7 @@ int thread(void *data)
 	/* while the thread isn't told to stop */
 	while(1)
 	{
+		printk(KERN_INFO "Kernel thread running\n");
 		if (kthread_should_stop())
 		{
 			break;
@@ -57,7 +58,12 @@ int thread(void *data)
 			if (get_cpu_use( dataptr->pid, &cpu_value) == 0)
 			{
 				dataptr->cpu_time = cpu_value;
+				printk(KERN_INFO "Updating pid:%d cpu time\n", dataptr->pid);
 			} // else invalid pid, remove from list or ignore?
+			else
+			{
+				printk(KERN_INFO "Invalid pid, did not update\n");
+			}
 		}
 		spin_unlock_irqrestore(&lock, flags);
 		
@@ -76,8 +82,15 @@ int thread(void *data)
 /* timer callback function */
 void my_timer_callback(unsigned long data)
 {
+	int ret = 0;
+
 	//wake up kernel thread
-	wake_up_process(sleeping_task); //returns 1 if wakes process, 0 if process still running
+	ret = wake_up_process(sleeping_task); //returns 1 if wakes process, 0 if process still running
+	if (ret == 1){
+		printk(KERN_INFO "Woke up kernel thread\n");
+	} else {
+		printk(KERN_INFO "Kernel thread still running\n");
+	}
 	printk(KERN_INFO "Timer callback function (%ld)\n", jiffies);
 }
 
@@ -107,7 +120,6 @@ int procfile_write( struct file *file, const char *buffer, unsigned long count, 
 	struct node *obj;
 	unsigned long flags;
 
-  	/* TODO */
   	procfs_buffer_size = count;
   	if (procfs_buffer_size > PROCFS_MAX_SIZE){
     		procfs_buffer_size = PROCFS_MAX_SIZE;
@@ -123,7 +135,7 @@ int procfile_write( struct file *file, const char *buffer, unsigned long count, 
     	
 	obj = (struct node *)kmalloc( sizeof(struct node), GFP_KERNEL );
   	if (obj) {
-		obj->pid = 1234; /*TODO from char* to int*/
+		obj->pid = simple_strtol(procfs_buffer, NULL, 10);
   		obj->cpu_time = 0;
 		INIT_LIST_HEAD(&obj->list);
 		spin_lock_irqsave(&lock, flags);

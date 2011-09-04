@@ -7,15 +7,22 @@ int main()
 
 
   	fp = fopen("/proc/mp1/status", "w");
-  	fprintf(fp, "%d", getpid());
-  	fclose(fp);
+  	if (fp)
+	{
+		fprintf(fp, "%d", getpid());
+		printf("userapp's PID: %d\n", getpid());
+  		fclose(fp);
+	}
 
 	fp = fopen("/proc/mp1/status", "r");
-	while (fgets(line, 100, fp) != NULL)
+	if (fp)
 	{
-		printf( "%s\n", line );
+		while (fgets(line, 100, fp) != NULL)
+		{
+			printf( "%s\n", line );
+		}
+		fclose(fp);
 	}
-	fclose(fp);
 	
   	return 0;
 }
