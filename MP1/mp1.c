@@ -86,11 +86,15 @@ void my_timer_callback(unsigned long data)
 
 	//wake up kernel thread
 	ret = wake_up_process(sleeping_task); //returns 1 if wakes process, 0 if process still running
-	if (ret == 1){
+	if (ret == 1)
+	{
 		printk(KERN_INFO "Woke up kernel thread\n");
-	} else {
+	} 
+	else 
+	{
 		printk(KERN_INFO "Kernel thread still running\n");
 	}
+
 	printk(KERN_INFO "Timer callback function (%ld)\n", jiffies);
 }
 
@@ -104,7 +108,8 @@ int procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer
 	unsigned long flags;
 
 	spin_lock_irqsave(&lock, flags);
-	list_for_each_entry(temp, &process_list, list){
+	list_for_each_entry(temp, &process_list, list)
+	{
 		ptr += sprintf( ptr, "%d: %ld\n", temp->pid, temp->cpu_time);
 	}
 	spin_unlock_irqrestore(&lock, flags);
@@ -121,12 +126,14 @@ int procfile_write( struct file *file, const char *buffer, unsigned long count, 
 	unsigned long flags;
 
   	procfs_buffer_size = count;
-  	if (procfs_buffer_size > PROCFS_MAX_SIZE){
+  	if (procfs_buffer_size > PROCFS_MAX_SIZE)
+	{
     		procfs_buffer_size = PROCFS_MAX_SIZE;
   	}
 
   	/* write data to buffer */
-  	if (copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ){
+  	if (copy_from_user(procfs_buffer, buffer, procfs_buffer_size) )
+	{
     		return -EFAULT;
   	}
 
@@ -157,14 +164,16 @@ int init_module(void)
 	
 	/* Create /proc/mp1 directory */
 	mp1_proc_directory = proc_mkdir(PROCFS_DIRNAME, NULL);
-	if (mp1_proc_directory == NULL){
-	  printk(KERN_ALERT "Error: Could not initialize /proc/%s\n", PROCFS_DIRNAME);
-	  return -ENOMEM;
+	if (mp1_proc_directory == NULL)
+	{
+		printk(KERN_ALERT "Error: Could not initialize /proc/%s\n", PROCFS_DIRNAME);
+		return -ENOMEM;
 	}
 
 	/* Create /proc/mp1/status file */
 	status_file = create_proc_entry(PROCFS_FILENAME, 0666, mp1_proc_directory);
-	if (status_file == NULL){
+	if (status_file == NULL)
+	{
 	  	printk(KERN_ALERT "Error: Could not initialize /proc/%s\n", PROCFS_FILENAME);
 	  	return -ENOMEM;
 	}
@@ -182,8 +191,9 @@ int init_module(void)
 
 	setup_timer( &my_timer, my_timer_callback, 0);
 	rval = mod_timer(&my_timer, jiffies+msecs_to_jiffies(TIMEOUT));
-	if(rval){
-		printk("Error in mod_timer\n");
+	if(rval)
+	{
+		printk(KERN_INFO "Error in mod_timer\n");
 	}
 		
 	sleeping_task = kthread_run(thread, NULL, "kthread");
@@ -202,28 +212,32 @@ void cleanup_module(void)
 
 	/* Free Linked List */
 	spin_lock_irqsave(&lock, flags);
-        list_for_each_safe(pos, q, &process_list){
-                tmp = list_entry(pos, struct node, list);
-                list_del(pos);
-                kfree(tmp);
-        }
+    list_for_each_safe(pos, q, &process_list)
+	{
+		tmp = list_entry(pos, struct node, list);
+        list_del(pos);
+        kfree(tmp);
+    }
 	spin_unlock_irqrestore(&lock, flags);
 
 	/* Stop timer */
 	rval = del_timer(&my_timer);
-	if (rval){
-		printk("The timer is still in use... \n");
+	if (rval)
+	{
+		printk(KERN_INFO "The timer is still in use... \n");
 	}
 
 	/* Stop kernel thread */
 	kthread_stop(sleeping_task);
 
 	/* Remove proc dir and file */
-        remove_proc_entry(PROCFS_FILENAME, mp1_proc_directory);
-        remove_proc_entry(PROCFS_DIRNAME, NULL);
-	printk(KERN_INFO "/proc/%s/%s removed\n", PROCFS_DIRNAME, PROCFS_FILENAME);
-        printk(KERN_INFO "/proc/%s removed\n", PROCFS_DIRNAME);
-	printk(KERN_INFO "Goodbye world 1.\n");
+	if (status_file)
+	{
+		remove_proc_entry(PROCFS_FILENAME, mp1_proc_directory);
+		remove_proc_entry(PROCFS_DIRNAME, NULL);
+		printk(KERN_INFO "/proc/%s/%s removed\n", PROCFS_DIRNAME, PROCFS_FILENAME);
+		printk(KERN_INFO "/proc/%s removed\n", PROCFS_DIRNAME);
+	}	
 }
 
 MODULE_AUTHOR("Group 6");
