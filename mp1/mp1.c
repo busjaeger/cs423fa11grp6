@@ -14,7 +14,7 @@
 #define DIR_NAME "mp1"
 #define FILE_NAME "status"
 #define THREAD_NAME "task-stats-collector"
-#define MAX_PID_DIGITS 11 //TODO: derive from pid_t?
+#define MAX_PID_DIGITS 11
 #define SYNC_INTERVAL 5000
 
 struct task_stats {
@@ -131,23 +131,35 @@ int tsm_write_proc(struct file *file, const char __user *buffer,
 
 /**
  * proc_fs.h#read_proc implementation: each line
- * TODO: understand the contract of this function
  */
 int tsm_read_proc(char *page, char **start, off_t off,
 			int count, int *eof, void *data)
 {
 	char *ptr = page;
 	struct task_stats *stats;
+	char line[64];
+	int len;
+	// we don't handle offset
+	if (off > 0) {
+		*eof = 1;
+		return 0;
+	}
+	// print list
 	mutex_lock(&stats_mutex);
-	list_for_each_entry(stats, &stats_head, list)
-		ptr += sprintf(ptr, "%d: %ld\n", stats->pid, stats->utime);
+	list_for_each_entry(stats, &stats_head, list) {
+		len = sprintf(line, "%d: %ld\n", stats->pid, stats->utime);
+		count -= (len = min(len, count));
+		sprintf(ptr, line, len);
+		ptr += len;
+		if (count == 0)
+			break;
+	}
 	mutex_unlock(&stats_mutex);
 	return ptr - page;
 }
 
 /**
  * converts character data passed from user space into a pid.
- * TODO: define behavior (max digits, ignores trailing characters etc.)
  */
 static pid_t ustr_to_pid(const char __user *buffer, unsigned long count)
 {
