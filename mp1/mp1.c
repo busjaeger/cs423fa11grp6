@@ -9,11 +9,13 @@
 #include <linux/kthread.h>
 #include <asm/cputime.h>
 #include <asm/uaccess.h>
+#include "mp1_given.h"
 
 #define DIR_NAME "mp1"
 #define FILE_NAME "status"
 #define THREAD_NAME "task-stats-collector"
 #define MAX_PID_DIGITS 11 //TODO: derive from pid_t?
+#define SYNC_INTERVAL 5000
 
 struct task_stats {
 	pid_t pid;
@@ -50,22 +52,24 @@ static int tsm_init(void)
 	// create proc directory and file
 	dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!dir) {
-		printk(KERN_ERR "unable to create proc directory %s\n", DIR_NAME);
+		printk(KERN_ERR "tsm: unable to create proc directory %s.\n", DIR_NAME);
 		return -ENOMEM;
 	}
 	stats_file = create_proc_entry(FILE_NAME, S_IRUGO | S_IWUGO, dir);
 	if (!stats_file) {
-		printk(KERN_ERR "unable to create proc file %s\n", FILE_NAME);
+		printk(KERN_ERR "tsm: unable to create proc file %s.\n", FILE_NAME);
 		remove_proc_entry(DIR_NAME, NULL);
 		return -ENOMEM;
 	}
 	// set proc functions
 	stats_file->read_proc = tsm_read_proc;
 	stats_file->write_proc = tsm_write_proc;
-	// start kernel thread
+	// start kernel thread. Note: we also had a version that used
+	// setup_timer, mod_timer, wake_up_process, and schedule, but
+	// found schedule_timeout to be more convenient/compact
 	stats_thread = kthread_run(stats_collector, NULL, THREAD_NAME);
 	if (IS_ERR(stats_thread)) {
-		printk(KERN_ERR "failed to create kernel thread %s\n", THREAD_NAME);
+		printk(KERN_ERR "tsm: failed to create kernel thread %s.\n", THREAD_NAME);
 		remove_proc_entry(FILE_NAME, dir);
 		remove_proc_entry(DIR_NAME, NULL);
 		return PTR_ERR(stats_thread);
@@ -110,7 +114,7 @@ int tsm_write_proc(struct file *file, const char __user *buffer,
 	// parse PID
 	pid = ustr_to_pid(buffer, count);
 	if (pid < -1) {
-		printk(KERN_ERR "registration failed: invalid PID");
+		printk(KERN_ERR "tsm: registration failed due to invalid PID");
 		return -1;
 	}
 	// register task stats if not already present
@@ -188,12 +192,15 @@ static struct task_stats *_find_task_stats(pid_t pid)
 	return NULL;
 }
 
+/**
+ * periodically syncs the stats with the task info
+ */
 static int stats_collector(void *data)
 {
 	struct task_stats *stats;
 	struct task_struct *task;
 	unsigned long timeout;
-	timeout = msecs_to_jiffies(5000);
+	timeout = msecs_to_jiffies(SYNC_INTERVAL);
 	while (1) {
 		__set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout(timeout);
@@ -201,12 +208,8 @@ static int stats_collector(void *data)
 			break;
 		mutex_lock(&stats_mutex);
 	        list_for_each_entry(stats, &stats_head, list) {
-			// TODO replace with include
-			rcu_read_lock();
-			task=pid_task(find_vpid(stats->pid), PIDTYPE_PID);
-			if (task!=NULL)
-				stats->utime = task->utime;
-			rcu_read_unlock();
+			if (get_cpu_use(stats->pid, &stats->utime))
+				printk(KERN_WARNING "tsm: no process for PID %d found.\n", stats->pid);
 		}
 		mutex_unlock(&stats_mutex);
 	}
