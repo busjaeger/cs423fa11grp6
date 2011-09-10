@@ -4,17 +4,16 @@
 #include <linux/proc_fs.h>    	/* Using proc fs */
 #include <linux/list.h>       	/* Kernel Linked List */
 #include <asm/uaccess.h>      	/* for copy_from_user */
-#include <linux/timer.h>	/* jiffies, kernel timer */
-#include <asm/spinlock.h>	/* spinlock */
-#include <linux/spinlock.h>	/* spinlock */
+#include <linux/timer.h>	    /* jiffies, kernel timer */
+#include <asm/spinlock.h>	    /* spinlock */
+#include <linux/spinlock.h>	    /* spinlock */
 #include <linux/kthread.h>
 #include <linux/wait.h>
 #include "mp1_given.h"
 
 #define PROCFS_DIRNAME "mp1"
 #define PROCFS_FILENAME "status"
-#define PROCFS_MAX_SIZE 1024
-#define PROCFS_BUFFERNAME "buffer1k"
+#define BUFFER_SIZE 100
 #define NOT_PENDING 0
 #define TIMEOUT 5000
 
@@ -26,7 +25,6 @@ struct node {
   unsigned long cpu_time;
 };
 static LIST_HEAD(process_list);
-static char procfs_buffer[PROCFS_MAX_SIZE];
 static unsigned long procfs_buffer_size = 0;
 static struct timer_list my_timer;
 static spinlock_t lock;
@@ -124,11 +122,12 @@ int procfile_write( struct file *file, const char *buffer, unsigned long count, 
 {
 	struct node *obj;
 	unsigned long flags;
+	char procfs_buffer[BUFFER_SIZE];
 
-  	procfs_buffer_size = count;
-  	if (procfs_buffer_size > PROCFS_MAX_SIZE)
+	procfs_buffer_size = count;
+  	if (count > BUFFER_SIZE)
 	{
-    		procfs_buffer_size = PROCFS_MAX_SIZE;
+    		procfs_buffer_size = BUFFER_SIZE;
   	}
 
   	/* write data to buffer */
