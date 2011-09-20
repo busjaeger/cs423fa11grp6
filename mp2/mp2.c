@@ -103,6 +103,25 @@ struct mrs_task_struct *create_mrs_task(struct task_struct *task,
 	return mrs_task;
 }
 
+// admission control: returns 0 if can be admitted, 1 if can not be admitted
+// TODO: use float or unsigned int; need conversion?
+static int _mrs_admission_control(unsigned int new_task_period, unsigned int new_task_runtime)
+{
+	struct list_head *position = NULL;
+	struct mrs_task_struct *mrs_task = NULL;
+	unsigned int acceptance_value = 0.693;
+	int rvalue = 1;
+	unsigned int sum_ratio = new_task_runtime / new_task_period;
+	list_for_each(position, &mrs_tasks) {
+		mrs_task = list_entry(position, struct mrs_task_struct, list);
+		sum_ratio = sum_ratio + (mrs_task->runtime / mrs_task->period);
+	}
+	if (sum_ratio <= acceptance_value) {
+		rvalue = 0;
+	}	
+	return rvalue;
+}
+
 static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtime)
 {
 	struct task_struct *task;
@@ -117,7 +136,10 @@ static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtim
 		return -1;
 	}
 	mutex_lock(&mrs_mutex);
-	// TODO admission control
+	if (_mrs_admission_control(period, runtime)) {
+		printk(KERN_ERR "mrs: pid %d not admitted\n", pid);
+		return -1;
+	}
 	if (_find_mrs_task(pid)) {
 		printk(KERN_ERR "mrs: pid %d already registered.\n", pid);
 		mutex_unlock(&mrs_mutex);
@@ -175,7 +197,9 @@ int mrs_write_proc(struct file *file, const char __user *buffer,
 	unsigned int period, runtime;
 
 	proc_buffer=kmalloc(count, GFP_KERNEL);
-	copy_from_user(proc_buffer, buffer, count);
+	if (copy_from_user(proc_buffer, buffer, count)) {
+		return -EFAULT;
+	}
 	// TODO error handling
 	switch (*proc_buffer) {
 		case 'R':
