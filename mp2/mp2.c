@@ -104,19 +104,16 @@ struct mrs_task_struct *create_mrs_task(struct task_struct *task,
 }
 
 // admission control: returns 0 if can be admitted, 1 if can not be admitted
-// TODO: use float or unsigned int; need conversion?
 static int _mrs_admission_control(unsigned int new_task_period, unsigned int new_task_runtime)
 {
-	struct list_head *position = NULL;
-	struct mrs_task_struct *mrs_task = NULL;
-	unsigned int acceptance_value = 0.693;
+	struct mrs_task_struct *position = NULL;
+	unsigned int acceptance_value = 693;
 	int rvalue = 1;
 	unsigned int sum_ratio = new_task_runtime / new_task_period;
-	list_for_each(position, &mrs_tasks) {
-		mrs_task = list_entry(position, struct mrs_task_struct, list);
-		sum_ratio = sum_ratio + (mrs_task->runtime / mrs_task->period);
+	list_for_each_entry(position, &mrs_tasks, list) {
+		sum_ratio = sum_ratio + (position->runtime / position->period);
 	}
-	if (sum_ratio <= acceptance_value) {
+	if ((sum_ratio * 1000) <= acceptance_value) {
 		rvalue = 0;
 	}	
 	return rvalue;
@@ -138,6 +135,7 @@ static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtim
 	mutex_lock(&mrs_mutex);
 	if (_mrs_admission_control(period, runtime)) {
 		printk(KERN_ERR "mrs: pid %d not admitted\n", pid);
+		mutex_unlock(&mrs_mutex);
 		return -1;
 	}
 	if (_find_mrs_task(pid)) {
