@@ -17,6 +17,7 @@
 #define DIR_NAME "mp2"
 #define FILE_NAME "status"
 #define THREAD_NAME "mrs-dispatcher"
+#define MAX_PERIOD 0xffffffff
 
 enum mrs_state {NEW, SLEEPING, READY, RUNNING };
 
@@ -38,6 +39,9 @@ static LIST_HEAD(mrs_tasks);
 static DEFINE_MUTEX(mrs_mutex);
 // dispatcher thread
 static struct task_struct *dispatcher_thread;
+// global current task
+static struct mrs_task_struct *currently_running_task;
+
 
 // find task from task list
 struct mrs_task_struct *_find_mrs_task(pid_t pid)
@@ -53,14 +57,45 @@ struct mrs_task_struct *_find_mrs_task(pid_t pid)
 // dispatcher thread function
 static int dispatch(void *data)
 {
+	struct mrs_task_struct *position = NULL;
+	struct mrs_task_struct *task_with_highest_priority = NULL;
+	unsigned int shortest_period = MAX_PERIOD;
+	struct sched_param *sparam = NULL;
+
 	while(1) {
-		if (kthread_should_stop())
+		if (kthread_should_stop()) {
 			break;
-		// TODO find ready job from list w/ highest priority
+		}
+		// find ready job from list w/ highest priority (shortest period)
+		position = NULL;
+		task_with_highest_priority = NULL;
+		shortest_period = MAX_PERIOD;
+		sparam = NULL;
+		list_for_each_entry(position, &mrs_tasks, list) {
+			if (position->state == READY) {
+				if (position->period < shortest_period ) {
+					task_with_highest_priority = position;
+				}
+			}
+		}
 		// set task to FIFO
 		// set task to RUNNING
 		// if previously RUNNING -> change to NORMAL prio & READY
 		// update global task
+		if (task_with_highest_priority) {
+			// TODO Not sure about the order of these lines:
+			wake_up_process(task_with_highest_priority->task);
+			sparam->sched_priority = MAX_USER_RT_PRIO - 1;
+			task_with_highest_priority->state = RUNNING;
+			sched_setscheduler(task_with_highest_priority->task, SCHED_FIFO, sparam);
+
+			sparam->sched_priority = 0;
+			currently_running_task->state = READY;
+			sched_setscheduler(currently_running_task->task, SCHED_NORMAL, sparam);
+
+			currently_running_task = task_with_highest_priority;
+		}
+		// else TODO need to do anything in this case?		
 	}
 	return 0;
 }
@@ -256,6 +291,7 @@ static int mrs_init(void)
                 remove_proc_entry(DIR_NAME, NULL);
                 return PTR_ERR(dispatcher_thread);
         }
+	currently_running_task = NULL;
         return 0;
 }
 
