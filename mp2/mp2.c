@@ -257,8 +257,8 @@ static int deregister_mrs_task(pid_t pid)
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		if(task->task->pid == pid) {
-			if(task == currently_running_task) {
-				currently_running_task = NULL;
+			if(task == current_mrs) {
+				current_mrs = NULL;
 			}
 
 			list_del(ptr);
