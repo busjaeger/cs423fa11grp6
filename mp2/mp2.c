@@ -87,11 +87,13 @@ static int dispatch(void *data)
 			wake_up_process(task_with_highest_priority->task);
 			sparam->sched_priority = MAX_USER_RT_PRIO - 1;
 			task_with_highest_priority->state = RUNNING;
-			sched_setscheduler(task_with_highest_priority->task, SCHED_FIFO, sparam);
+			sched_setscheduler(task_with_highest_priority->task, SCHED_FIFO, 
+								sparam);
 
 			sparam->sched_priority = 0;
 			currently_running_task->state = READY;
-			sched_setscheduler(currently_running_task->task, SCHED_NORMAL, sparam);
+			sched_setscheduler(currently_running_task->task, SCHED_NORMAL, 
+								sparam);
 
 			currently_running_task = task_with_highest_priority;
 		}
@@ -106,17 +108,20 @@ void period_timeout(unsigned long data)
 	struct mrs_task_struct *mrs_task = (struct mrs_task_struct *)data;
 	switch (mrs_task->state) {
 		case NEW:
-			printk(KERN_ALERT "mrs: timer triggered for new task %d.\n", mrs_task->task->pid);
+			printk(KERN_ALERT "mrs: timer triggered for new task %d.\n", 
+					mrs_task->task->pid);
 			break;
 		case SLEEPING:
 			mrs_task->state = READY;
 			wake_up_process(dispatcher_thread);
 			break;
 		case READY:
-			printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n", mrs_task->task->pid);
+			printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n", 
+					mrs_task->task->pid);
 			break;
 		case RUNNING:
-			printk(KERN_WARNING "mrs: timer triggered for running task %d.\n", mrs_task->task->pid);
+			printk(KERN_WARNING "mrs: timer triggered for running task %d.\n", 
+					mrs_task->task->pid);
 			break;
 	}
 }
@@ -125,7 +130,7 @@ void period_timeout(unsigned long data)
 struct mrs_task_struct *create_mrs_task(struct task_struct *task,
 				unsigned int period, unsigned int runtime)
 {
-        struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
+    struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
 	if (mrs_task) {
 	        mrs_task->task = task;
 	        mrs_task->state = NEW;
@@ -139,7 +144,8 @@ struct mrs_task_struct *create_mrs_task(struct task_struct *task,
 }
 
 // admission control: returns 0 if can be admitted, 1 if can not be admitted
-static int _mrs_admission_control(unsigned int new_task_period, unsigned int new_task_runtime)
+static int _mrs_admission_control(unsigned int new_task_period, 
+									unsigned int new_task_runtime)
 {
 	struct mrs_task_struct *position = NULL;
 	unsigned int acceptance_value = 693;
@@ -154,7 +160,8 @@ static int _mrs_admission_control(unsigned int new_task_period, unsigned int new
 	return rvalue;
 }
 
-static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtime)
+static int register_mrs_task(pid_t pid, unsigned int period, 
+									unsigned int runtime)
 {
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
@@ -216,9 +223,29 @@ static int yield_msr_task(pid_t pid)
 	return 0;
 }
 
-// TODO set global task null, remove from list, remove timer?
 static int deregister_mrs_task(pid_t pid)
 {
+	struct list_head *ptr, *tmp;
+	struct mrs_task_struct *task;
+	
+	mutex_lock(&mrs_mutex);
+
+	list_for_each_safe(ptr, tmp, &mrs_tasks) {
+		task = list_entry(ptr, struct mrs_task_struct, list);
+		if(task->task->pid == pid) {
+			if(task == currently_running_task) {
+				currently_running_task = NULL;
+			}
+			
+			list_del(ptr);
+			del_timer(&task->period_timer); // should we remove task timer?
+			kfree(task);
+			break;
+		}
+	}
+		
+	mutex_unlock(&mrs_mutex);
+	
 	return 0;
 }
 
@@ -255,13 +282,25 @@ int mrs_write_proc(struct file *file, const char __user *buffer,
 	return count;
 }
 
-/*
- * TODO read real time task list
- */
+// Print registered process list to proc special file
 int mrs_read_proc(char *page, char **start, off_t off,
                         int count, int *eof, void *data)
 {
-	return 0;
+	char *ptr = page;
+	struct mrs_task_struct *mrs_task;
+	
+	mutex_lock(&mrs_mutex);
+	
+	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
+		// Output: PID Period ProccessingTime
+		ptr += sprintf( ptr, "%d %d %d\n", mrs_task->task->pid, 
+					mrs_task->period, 
+					mrs_task->runtime);
+		
+	}	
+	mutex_unlock(&mrs_mutex);
+		
+	return ptr - page;
 }
 
 // module init
@@ -285,12 +324,13 @@ static int mrs_init(void)
 	proc_file->write_proc = mrs_write_proc;
 	// create dispatcher thread (not started here)
 	dispatcher_thread = kthread_create(dispatch, NULL, THREAD_NAME);
-        if (IS_ERR(dispatcher_thread)) {
-                printk(KERN_ERR "mrs: failed to create kernel thread %s.\n", THREAD_NAME);
-                remove_proc_entry(FILE_NAME, proc_dir);
-                remove_proc_entry(DIR_NAME, NULL);
-                return PTR_ERR(dispatcher_thread);
-        }
+	if (IS_ERR(dispatcher_thread)) {
+		printk(KERN_ERR "mrs: failed to create kernel thread %s.\n", 
+				THREAD_NAME);
+		remove_proc_entry(FILE_NAME, proc_dir);
+		remove_proc_entry(DIR_NAME, NULL);
+		return PTR_ERR(dispatcher_thread);
+	}
 	currently_running_task = NULL;
         return 0;
 }
@@ -314,7 +354,7 @@ static void mrs_exit(void)
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		list_del(ptr);
-		// TODO stop timer?
+		// TODO stop timer? ==> del_timer(&task->period_timer);
 		kfree(task);
 	}
 	mutex_unlock(&mrs_mutex);
