@@ -328,7 +328,7 @@ int mrs_read_proc(char *page, char **start, off_t off,
 
 // module init - sets up structes, registeres proc file and creates the
 // dispatcher kthread
-static int mrs_init(void)
+static int _mrs_init(void)
 {
 	struct proc_dir_entry *proc_dir;
 	// create proc directory and file
@@ -383,7 +383,7 @@ static void mrs_exit(void)
 	mutex_unlock(&mrs_mutex);
 }
 
-module_init(mrs_init);
+module_init(_mrs_init);
 module_exit(mrs_exit);
 
 MODULE_LICENSE("GPL");
