@@ -54,13 +54,16 @@ struct mrs_task_struct *_find_mrs_task(pid_t pid)
         return NULL;
 }
 
-static inline int mod_period_timer(struct mrs_task_struct *mrs_task)
+// updates the task timer
+static inline int _mod_period_timer(struct mrs_task_struct *mrs_task)
 {
 	unsigned long expires = jiffies + msecs_to_jiffies(mrs_task->period);
 	return mod_timer(&mrs_task->period_timer, expires);
 }
 
-static inline int mrs_sched_setscheduler(struct task_struct *task, int policy, int priority)
+// Updates task scheduling policy
+static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
+											int priority)
 {
 	struct sched_param sparam = { priority };
 	return sched_setscheduler(task, policy, &sparam);
@@ -77,26 +80,30 @@ static int dispatch(void *data)
 		mutex_lock(&mrs_mutex);
 		// current task was put to sleep, so reset priority and unset current
 		if (current_mrs && current_mrs->state == SLEEPING) {
-			mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
+			_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
 			current_mrs = NULL;
 		}
 		// find ready job from list w/ highest priority (shortest period)
-		next_ready = list_empty(&mrs_tasks) ? NULL : list_first_entry(&mrs_tasks, struct mrs_task_struct, list);
+		next_ready = list_empty(&mrs_tasks) ? NULL : 
+				list_first_entry(&mrs_tasks, struct mrs_task_struct, list);
 		list_for_each_entry(position, &mrs_tasks, list) {
-			if (position->state == READY && position->period < next_ready->period)
+			if (position->state == READY && 
+						position->period < next_ready->period)
 				next_ready = position;
 		}
 		// if another task with higher priority is ready, switch to it
-		if (next_ready && (!current_mrs || current_mrs->period > next_ready->period)) {
+		if (next_ready && 
+				(!current_mrs || current_mrs->period > next_ready->period)) {
 			// preempt current task if present
 			if (current_mrs) {
 				current_mrs->state = READY;
-				mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
+				_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
 				// we don't want this task to run with normal priority
 				set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
 			}
 			next_ready->state = RUNNING;
-			mrs_sched_setscheduler(next_ready->task, SCHED_FIFO, MAX_USER_RT_PRIO - 1);
+			_mrs_sched_setscheduler(next_ready->task, SCHED_FIFO, 
+									MAX_USER_RT_PRIO - 1);
 			wake_up_process(next_ready->task);
 			current_mrs = next_ready;
 		}
@@ -108,8 +115,8 @@ static int dispatch(void *data)
 	return 0;
 }
 
-// timer callback
-void period_timeout(unsigned long data)
+// timer callback - wakes dispatcher
+void _period_timeout(unsigned long data)
 {
 	// TODO the mrs task could have been released during deregister
 	struct mrs_task_struct *mrs_task = (struct mrs_task_struct *)data;
@@ -120,7 +127,7 @@ void period_timeout(unsigned long data)
 			break;
 		case SLEEPING:
 			mrs_task->state = READY;
-			mod_period_timer(mrs_task);
+			_mod_period_timer(mrs_task);
 			// will trigger reschedule on interrupt exit
 			wake_up_process(dispatcher_thread);
 			break;
@@ -136,7 +143,7 @@ void period_timeout(unsigned long data)
 }
 
 // allocate and initialize a task
-struct mrs_task_struct *create_mrs_task(struct task_struct *task,
+struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 				unsigned int period, unsigned int runtime)
 {
     struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
@@ -146,7 +153,7 @@ struct mrs_task_struct *create_mrs_task(struct task_struct *task,
 	        mrs_task->period = period;
 		mrs_task->runtime = runtime;
 	        init_timer(&mrs_task->period_timer);
-	        mrs_task->period_timer.function = period_timeout;
+	        mrs_task->period_timer.function = _period_timeout;
 	        mrs_task->period_timer.data = (unsigned long)mrs_task;
 	}
 	return mrs_task;
@@ -169,6 +176,9 @@ static int _mrs_admission_control(unsigned int new_task_period,
 	return rvalue;
 }
 
+// Verifies that a PID is valid, passes admission control, and isn't already 
+// registered. If verificaiton succeeds, creates a new task entry and adds it
+// to the list.
 static int register_mrs_task(pid_t pid, unsigned int period,
 									unsigned int runtime)
 {
@@ -194,7 +204,7 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 		mutex_unlock(&mrs_mutex);
 		return -1;
 	}
-	mrs_task = create_mrs_task(task, period, runtime);
+	mrs_task = _create_mrs_task(task, period, runtime);
 	if (!mrs_task) {
 		mutex_unlock(&mrs_mutex);
 		return -ENOMEM;
@@ -204,6 +214,8 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 	return 0;
 }
 
+// Handles yield calls from usermode app. Changes task state and wakes the
+// dispatcher thread
 static int yield_msr_task(pid_t pid)
 {
 	struct mrs_task_struct *mrs_task;
@@ -216,7 +228,7 @@ static int yield_msr_task(pid_t pid)
 	switch (mrs_task->state) {
 		case NEW:
 			mrs_task->state = READY;
-			mod_period_timer(mrs_task);
+			_mod_period_timer(mrs_task);
 			break;
 		case RUNNING:
 			mrs_task->state = SLEEPING;
@@ -235,13 +247,13 @@ err:
 	return -1;
 }
 
+// Remove a task from the list, delete its timer, and free it
 static int deregister_mrs_task(pid_t pid)
 {
 	struct list_head *ptr, *tmp;
 	struct mrs_task_struct *task;
 
 	mutex_lock(&mrs_mutex);
-
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		if(task->task->pid == pid) {
@@ -250,17 +262,17 @@ static int deregister_mrs_task(pid_t pid)
 			}
 
 			list_del(ptr);
-			del_timer(&task->period_timer); // should we remove task timer?
+			del_timer(&task->period_timer);
 			kfree(task);
 			break;
 		}
 	}
-
 	mutex_unlock(&mrs_mutex);
 
 	return 0;
 }
 
+// Get input from usermode app and take action on it
 int mrs_write_proc(struct file *file, const char __user *buffer,
                         unsigned long count, void *data)
 {
@@ -302,10 +314,9 @@ int mrs_read_proc(char *page, char **start, off_t off,
 	struct mrs_task_struct *mrs_task;
 
 	mutex_lock(&mrs_mutex);
-
 	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
 		// Output: PID Period ProccessingTime
-		ptr += sprintf( ptr, "%d %d %d\n", mrs_task->task->pid,
+		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
 					mrs_task->period,
 					mrs_task->runtime);
 
@@ -315,7 +326,8 @@ int mrs_read_proc(char *page, char **start, off_t off,
 	return ptr - page;
 }
 
-// module init
+// module init - sets up structes, registeres proc file and creates the
+// dispatcher kthread
 static int mrs_init(void)
 {
 	struct proc_dir_entry *proc_dir;
@@ -343,14 +355,12 @@ static int mrs_init(void)
                 remove_proc_entry(DIR_NAME, NULL);
                 return PTR_ERR(dispatcher_thread);
         }
-	mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
+	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
 	current_mrs = NULL;
         return 0;
 }
 
-/**
- * releases module resources and frees dynamically allocated data
- */
+// releases module resources and frees dynamically allocated data
 static void mrs_exit(void)
 {
 	struct list_head *ptr, *tmp;
@@ -360,14 +370,14 @@ static void mrs_exit(void)
 		remove_proc_entry(FILE_NAME, proc_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
 	}
-        // stop kernel thread
-        kthread_stop(dispatcher_thread);
+	// stop kernel thread
+	kthread_stop(dispatcher_thread);
 	// free stats list
 	mutex_lock(&mrs_mutex);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		list_del(ptr);
-		// TODO stop timer? ==> del_timer(&task->period_timer);
+		del_timer(&task->period_timer);
 		kfree(task);
 	}
 	mutex_unlock(&mrs_mutex);
