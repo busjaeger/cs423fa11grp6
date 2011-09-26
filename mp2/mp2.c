@@ -37,7 +37,7 @@ static struct mrs_task_struct *current_mrs;
 
 
 // find task from task list
-struct mrs_task_struct *_find_mrs_task(pid_t pid)
+static struct mrs_task_struct *_find_mrs_task(pid_t pid)
 {
         struct mrs_task_struct *mrs_task;
         list_for_each_entry(mrs_task, &mrs_tasks, list) {
@@ -45,6 +45,20 @@ struct mrs_task_struct *_find_mrs_task(pid_t pid)
                         return mrs_task;
         }
         return NULL;
+}
+
+// find task ready task with shortest period
+static struct mrs_task_struct *_find_next_mrs_task()
+{
+	struct mrs_task_struct *pos, *next_ready = NULL;
+	unsigned int sp = MAX_PERIOD;
+	list_for_each_entry(pos, &mrs_tasks, list) {
+		if (pos->state == READY && pos->period < sp) {
+			sp = pos->period;
+			next_ready = pos;
+                }
+	}
+	return next_ready;
 }
 
 // updates the task timer
@@ -65,28 +79,21 @@ static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
 // dispatcher thread function
 static int dispatch(void *data)
 {
-	struct mrs_task_struct *position, *next_ready;
+	struct mrs_task_struct *next_ready;
 
 	while(1) {
 		if (kthread_should_stop())
 			break;
 		mutex_lock(&mrs_mutex);
-		// current task was put to sleep, so reset priority and unset current
+		// current task put to sleep > reset priority and unset current
 		if (current_mrs && current_mrs->state == SLEEPING) {
 			_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
 			current_mrs = NULL;
 		}
-		// find ready job from list w/ highest priority (shortest period)
-		next_ready = list_empty(&mrs_tasks) ? NULL : 
-				list_first_entry(&mrs_tasks, struct mrs_task_struct, list);
-		list_for_each_entry(position, &mrs_tasks, list) {
-			if (position->state == READY && 
-						position->period < next_ready->period)
-				next_ready = position;
-		}
 		// if another task with higher priority is ready, switch to it
-		if (next_ready && 
-				(!current_mrs || current_mrs->period > next_ready->period)) {
+		next_ready = _find_next_mrs_task();
+		if (next_ready &&
+			(!current_mrs || current_mrs->period > next_ready->period)) {
 			// preempt current task if present
 			if (current_mrs) {
 				current_mrs->state = READY;
@@ -96,7 +103,7 @@ static int dispatch(void *data)
 			}
 			next_ready->state = RUNNING;
 			_mrs_sched_setscheduler(next_ready->task, SCHED_FIFO, 
-									MAX_USER_RT_PRIO - 1);
+							MAX_USER_RT_PRIO - 1);
 			wake_up_process(next_ready->task);
 			current_mrs = next_ready;
 		}
@@ -139,7 +146,7 @@ void _period_timeout(unsigned long data)
 struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 				unsigned int period, unsigned int runtime)
 {
-    struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
+	struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
 	if (mrs_task) {
 	        mrs_task->task = task;
 	        mrs_task->state = NEW;
