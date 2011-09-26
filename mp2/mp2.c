@@ -63,7 +63,7 @@ static inline int _mod_period_timer(struct mrs_task_struct *mrs_task)
 
 // Updates task scheduling policy
 static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
-											int priority)
+								int priority)
 {
 	struct sched_param sparam = { priority };
 	return sched_setscheduler(task, policy, &sparam);
@@ -121,24 +121,24 @@ void _period_timeout(unsigned long data)
 	// TODO the mrs task could have been released during deregister
 	struct mrs_task_struct *mrs_task = (struct mrs_task_struct *)data;
 	switch (mrs_task->state) {
-		case NEW:
-			printk(KERN_ALERT "mrs: timer triggered for new task %d.\n",
-					mrs_task->task->pid);
-			break;
-		case SLEEPING:
-			mrs_task->state = READY;
-			_mod_period_timer(mrs_task);
-			// will trigger reschedule on interrupt exit
-			wake_up_process(dispatcher_thread);
-			break;
-		case READY:
-			printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n",
-					mrs_task->task->pid);
-			break;
-		case RUNNING:
-			printk(KERN_WARNING "mrs: timer triggered for running task %d.\n",
-					mrs_task->task->pid);
-			break;
+	case NEW:
+		printk(KERN_ALERT "mrs: timer triggered for new task %d.\n",
+				mrs_task->task->pid);
+		break;
+	case SLEEPING:
+		mrs_task->state = READY;
+		_mod_period_timer(mrs_task);
+		// will trigger reschedule on interrupt exit
+		wake_up_process(dispatcher_thread);
+		break;
+	case READY:
+		printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n",
+				mrs_task->task->pid);
+		break;
+	case RUNNING:
+		printk(KERN_WARNING "mrs: timer triggered for running task %d.\n",
+				mrs_task->task->pid);
+		break;
 	}
 }
 
@@ -161,26 +161,21 @@ struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 
 // admission control: returns 0 if can be admitted, 1 if can not be admitted
 static int _mrs_admission_control(unsigned int new_task_period,
-									unsigned int new_task_runtime)
+					unsigned int new_task_runtime)
 {
-	struct mrs_task_struct *position = NULL;
-	unsigned int acceptance_value = 693;
-	int rvalue = 1;
+	struct mrs_task_struct *position;
+	const unsigned int acceptance_value = 693;
 	unsigned int sum_ratio = new_task_runtime / new_task_period;
-	list_for_each_entry(position, &mrs_tasks, list) {
+	list_for_each_entry(position, &mrs_tasks, list)
 		sum_ratio = sum_ratio + (position->runtime / position->period);
-	}
-	if ((sum_ratio * 1000) <= acceptance_value) {
-		rvalue = 0;
-	}
-	return rvalue;
+	return (sum_ratio * 1000) <= acceptance_value;
 }
 
 // Verifies that a PID is valid, passes admission control, and isn't already 
 // registered. If verificaiton succeeds, creates a new task entry and adds it
 // to the list.
 static int register_mrs_task(pid_t pid, unsigned int period,
-									unsigned int runtime)
+				unsigned int runtime)
 {
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
@@ -226,16 +221,16 @@ static int yield_msr_task(pid_t pid)
 		goto err;
 	}
 	switch (mrs_task->state) {
-		case NEW:
-			mrs_task->state = READY;
-			_mod_period_timer(mrs_task);
-			break;
-		case RUNNING:
-			mrs_task->state = SLEEPING;
-			break;
-		default:
-			printk(KERN_ERR "mrs: invalid state transition attempted.\n");
-			goto err;
+	case NEW:
+		mrs_task->state = READY;
+		_mod_period_timer(mrs_task);
+		break;
+	case RUNNING:
+		mrs_task->state = SLEEPING;
+		break;
+	default:
+		printk(KERN_ERR "mrs: invalid state transition attempted.\n");
+		goto err;
 	}
 	__set_current_state(TASK_UNINTERRUPTIBLE);
 	wake_up_process(dispatcher_thread);
@@ -257,10 +252,8 @@ static int deregister_mrs_task(pid_t pid)
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		if(task->task->pid == pid) {
-			if(task == current_mrs) {
+			if(task == current_mrs)
 				current_mrs = NULL;
-			}
-
 			list_del(ptr);
 			del_timer(&task->period_timer);
 			kfree(task);
@@ -281,26 +274,24 @@ int mrs_write_proc(struct file *file, const char __user *buffer,
 	unsigned int period, runtime;
 
 	proc_buffer=kmalloc(count, GFP_KERNEL);
-	if (copy_from_user(proc_buffer, buffer, count)) {
+	if (copy_from_user(proc_buffer, buffer, count))
 		return -EFAULT;
-	}
-	// TODO error handling
 	switch (*proc_buffer) {
-		case 'R':
-			sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
-			register_mrs_task(pid, period, runtime);
-			break;
-		case 'Y':
-			sscanf(proc_buffer, "Y %d", &pid);
-			yield_msr_task(pid);
-			break;
-		case 'D':
-			sscanf(proc_buffer, "D %d", &pid);
-			deregister_mrs_task(pid);
-			break;
-		default:
-	                printk(KERN_ERR "mrs: invalid write command.\n");
-	                return count = -1;
+	case 'R':
+		sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
+		register_mrs_task(pid, period, runtime);
+		break;
+	case 'Y':
+		sscanf(proc_buffer, "Y %d", &pid);
+		yield_msr_task(pid);
+		break;
+	case 'D':
+		sscanf(proc_buffer, "D %d", &pid);
+		deregister_mrs_task(pid);
+		break;
+	default:
+                printk(KERN_ERR "mrs: invalid write command.\n");
+                return count = -1;
 	}
 	kfree(proc_buffer);
 	return count;
@@ -319,7 +310,6 @@ int mrs_read_proc(char *page, char **start, off_t off,
 		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
 					mrs_task->period,
 					mrs_task->runtime);
-
 	}
 	mutex_unlock(&mrs_mutex);
 
@@ -334,12 +324,14 @@ static int _mrs_init(void)
 	// create proc directory and file
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!proc_dir) {
-		printk(KERN_ERR "mrs: unable to create proc directory %s.\n", DIR_NAME);
+		printk(KERN_ERR "mrs: unable to create proc directory %s.\n",
+								DIR_NAME);
 		return -ENOMEM;
 	}
 	proc_file = create_proc_entry(FILE_NAME, S_IRUGO | S_IWUGO, proc_dir);
 	if (!proc_file) {
-		printk(KERN_ERR "mrs: unable to create proc file %s.\n", FILE_NAME);
+		printk(KERN_ERR "mrs: unable to create proc file %s.\n",
+								FILE_NAME);
 		remove_proc_entry(DIR_NAME, NULL);
 		return -ENOMEM;
 	}
