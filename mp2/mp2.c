@@ -1,10 +1,3 @@
-/*
- * TODO possible considerations
- *  could the task struct become invalid while referenced?
- *  could the mrs_task / task state get inconsistent?
- *  think through locking strategy; streamline locking
- */
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -165,10 +158,10 @@ static int _mrs_admission_control(unsigned int new_task_period,
 {
 	struct mrs_task_struct *position;
 	const unsigned int acceptance_value = 693;
-	unsigned int sum_ratio = new_task_runtime / new_task_period;
+	unsigned int sum_ratio = (1000 * new_task_runtime) / new_task_period;
 	list_for_each_entry(position, &mrs_tasks, list)
-		sum_ratio = sum_ratio + (position->runtime / position->period);
-	return (sum_ratio * 1000) <= acceptance_value;
+		sum_ratio += (1000 * position->runtime) / position->period;
+	return sum_ratio <= acceptance_value;
 }
 
 // Verifies that a PID is valid, passes admission control, and isn't already 
