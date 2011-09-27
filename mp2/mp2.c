@@ -5,12 +5,14 @@
 #include <linux/kthread.h>
 #include <linux/timer.h>
 #include <asm/uaccess.h>
+#include <linux/semaphore.h>
 #include "mp2_given.h"
 
 #define DIR_NAME "mp2"
 #define FILE_NAME "status"
 #define THREAD_NAME "mrs-dispatcher"
 #define MAX_PERIOD 0xffffffff
+#define MRS_PRIO MAX_USER_RT_PRIO - 1
 
 enum mrs_state {NEW, SLEEPING, READY, RUNNING };
 
@@ -29,7 +31,9 @@ static struct proc_dir_entry *proc_file;
 // task list
 static LIST_HEAD(mrs_tasks);
 // list lock
-static DEFINE_MUTEX(mrs_mutex);
+static DEFINE_SPINLOCK(mrs_lock);
+// coordination semaphore
+static struct semaphore mrs_sem;
 // dispatcher thread
 static struct task_struct *dispatcher_thread;
 // global current task
@@ -48,7 +52,7 @@ static struct mrs_task_struct *_find_mrs_task(pid_t pid)
 }
 
 // find task ready task with shortest period
-static struct mrs_task_struct *_find_next_mrs_task()
+static struct mrs_task_struct *_find_next_mrs_task(void)
 {
 	struct mrs_task_struct *pos, *next_ready = NULL;
 	unsigned int sp = MAX_PERIOD;
@@ -76,70 +80,74 @@ static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
 	return sched_setscheduler(task, policy, &sparam);
 }
 
+static void mrs_schedule(void)
+{
+	struct mrs_task_struct *next;
+	unsigned long flags;
+	spin_lock_irqsave(&mrs_lock, flags);
+	// current task was put to sleep, so reset priority and unset current
+	if (current_mrs && current_mrs->state == SLEEPING) {
+		_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
+		current_mrs = NULL;
+	}
+	// if another task with higher priority is ready, switch to it
+	next = _find_next_mrs_task();
+	if (next && (!current_mrs || current_mrs->period > next->period)) {
+		// preempt current task if present
+		if (current_mrs) {
+			current_mrs->state = READY;
+			_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL,
+				 0);
+			// we don't want this task run with normal priority
+			set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
+		}
+		next->state = RUNNING;
+		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_PRIO);
+		wake_up_process(next->task);
+		current_mrs = next;
+	}
+	spin_unlock_irqrestore(&mrs_lock, flags);
+}
+
 // dispatcher thread function
 static int dispatch(void *data)
 {
-	struct mrs_task_struct *next_ready;
-
 	while(1) {
+		down(&mrs_sem);
 		if (kthread_should_stop())
 			break;
-		mutex_lock(&mrs_mutex);
-		// current task put to sleep > reset priority and unset current
-		if (current_mrs && current_mrs->state == SLEEPING) {
-			_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
-			current_mrs = NULL;
-		}
-		// if another task with higher priority is ready, switch to it
-		next_ready = _find_next_mrs_task();
-		if (next_ready &&
-			(!current_mrs || current_mrs->period > next_ready->period)) {
-			// preempt current task if present
-			if (current_mrs) {
-				current_mrs->state = READY;
-				_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
-				// we don't want this task to run with normal priority
-				set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
-			}
-			next_ready->state = RUNNING;
-			_mrs_sched_setscheduler(next_ready->task, SCHED_FIFO, 
-							MAX_USER_RT_PRIO - 1);
-			wake_up_process(next_ready->task);
-			current_mrs = next_ready;
-		}
-		// put dispatcher to sleep and let scheduler pick next task
-		set_current_state(TASK_UNINTERRUPTIBLE);
-		mutex_unlock(&mrs_mutex);
-		schedule();
+		mrs_schedule();
 	}
 	return 0;
 }
 
 // timer callback - wakes dispatcher
-void _period_timeout(unsigned long data)
+void period_timeout(unsigned long data)
 {
-	// TODO the mrs task could have been released during deregister
-	struct mrs_task_struct *mrs_task = (struct mrs_task_struct *)data;
+	struct mrs_task_struct *mrs_task;
+	unsigned long flags;
+	pid_t pid = (pid_t)data;
+
+	spin_lock_irqsave(&mrs_lock, flags);
+	mrs_task = _find_mrs_task(pid);
+        if (!mrs_task)
+                goto err;
+	_mod_period_timer(mrs_task);
 	switch (mrs_task->state) {
 	case NEW:
-		printk(KERN_ALERT "mrs: timer triggered for new task %d.\n",
-				mrs_task->task->pid);
-		break;
+	case READY:
+	case RUNNING:
+		goto err;
 	case SLEEPING:
 		mrs_task->state = READY;
-		_mod_period_timer(mrs_task);
-		// will trigger reschedule on interrupt exit
-		wake_up_process(dispatcher_thread);
-		break;
-	case READY:
-		printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n",
-				mrs_task->task->pid);
-		break;
-	case RUNNING:
-		printk(KERN_WARNING "mrs: timer triggered for running task %d.\n",
-				mrs_task->task->pid);
+		up(&mrs_sem); //move after spin unlock?
 		break;
 	}
+        spin_unlock_irqrestore(&mrs_lock, flags);
+	return;
+err:
+        spin_unlock_irqrestore(&mrs_lock, flags);
+	printk(KERN_ALERT "mrs: timer triggered for awake task %d.\n", pid);
 }
 
 // allocate and initialize a task
@@ -153,7 +161,7 @@ struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 	        mrs_task->period = period;
 		mrs_task->runtime = runtime;
 	        init_timer(&mrs_task->period_timer);
-	        mrs_task->period_timer.function = _period_timeout;
+	        mrs_task->period_timer.function = period_timeout;
 	        mrs_task->period_timer.data = (unsigned long)mrs_task;
 	}
 	return mrs_task;
@@ -171,42 +179,39 @@ static int _mrs_admission_control(unsigned int new_task_period,
 	return sum_ratio <= acceptance_value;
 }
 
-// Verifies that a PID is valid, passes admission control, and isn't already 
-// registered. If verificaiton succeeds, creates a new task entry and adds it
-// to the list.
+/*
+ * Verifies that a PID is valid, passes admission control, and isn't already 
+ * registered. If verificaiton succeeds, creates a new task entry and adds it
+ * to the list.
+ */
 static int register_mrs_task(pid_t pid, unsigned int period,
 				unsigned int runtime)
 {
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
-	if (period == 0 || runtime == 0) {
-		printk(KERN_ERR "mrs: invalid arguments.\n");
-		return -1;
-	}
+	unsigned long flags;
+	if (period == 0 || runtime == 0)
+		return -EINVAL;
 	task = find_task_by_pid(pid);
-	if (!task || task != current) {
-		printk(KERN_ERR "mrs: invalid pid %d.\n", pid);
-		return -1;
-	}
-	mutex_lock(&mrs_mutex);
-	if (_mrs_admission_control(period, runtime)) {
-		printk(KERN_ERR "mrs: pid %d not admitted\n", pid);
-		mutex_unlock(&mrs_mutex);
-		return -1;
-	}
-	if (_find_mrs_task(pid)) {
-		printk(KERN_ERR "mrs: pid %d already registered.\n", pid);
-		mutex_unlock(&mrs_mutex);
-		return -1;
-	}
+	if (!task || task != current)
+		return -ESRCH;
+	// optimistically allocate task outside of critical region
 	mrs_task = _create_mrs_task(task, period, runtime);
-	if (!mrs_task) {
-		mutex_unlock(&mrs_mutex);
+	if (!mrs_task)
 		return -ENOMEM;
-	}
+	// critical section: add task if admitted and not alrady present
+	spin_lock_irqsave(&mrs_lock, flags);
+	if (_mrs_admission_control(period, runtime))
+		goto err;
+	if (_find_mrs_task(pid))
+		goto err;
 	list_add_tail(&mrs_task->list, &mrs_tasks);
-	mutex_unlock(&mrs_mutex);
+	spin_unlock_irqrestore(&mrs_lock, flags);
 	return 0;
+err:
+	spin_unlock_irqrestore(&mrs_lock, flags);
+	kfree(mrs_task);
+	return -EAGAIN;
 }
 
 // Handles yield calls from usermode app. Changes task state and wakes the
@@ -214,12 +219,12 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 static int yield_msr_task(pid_t pid)
 {
 	struct mrs_task_struct *mrs_task;
-	mutex_lock(&mrs_mutex);
+	unsigned long flags;
+
+	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task = _find_mrs_task(pid);
-	if (!mrs_task) {
-		printk(KERN_ERR "mrs: pid %d not registered.\n", pid);
+	if (!mrs_task)
 		goto err;
-	}
 	switch (mrs_task->state) {
 	case NEW:
 		mrs_task->state = READY;
@@ -233,12 +238,12 @@ static int yield_msr_task(pid_t pid)
 		goto err;
 	}
 	__set_current_state(TASK_UNINTERRUPTIBLE);
-	wake_up_process(dispatcher_thread);
-	mutex_unlock(&mrs_mutex);
+	up(&mrs_sem);// TODO switch order with unlock?
+	spin_unlock_irqrestore(&mrs_lock, flags);
 	schedule();
 	return 0;
 err:
-	mutex_unlock(&mrs_mutex);
+	spin_unlock_irqrestore(&mrs_lock, flags);
 	return -1;
 }
 
@@ -246,21 +251,22 @@ err:
 static int deregister_mrs_task(pid_t pid)
 {
 	struct list_head *ptr, *tmp;
-	struct mrs_task_struct *task;
+	struct mrs_task_struct *mrs_task;
+	unsigned long flags;
 
-	mutex_lock(&mrs_mutex);
+	spin_lock_irqsave(&mrs_lock, flags);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
-		task = list_entry(ptr, struct mrs_task_struct, list);
-		if(task->task->pid == pid) {
-			if(task == current_mrs)
+		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
+		if(mrs_task->task->pid == pid) {
+			if(mrs_task == current_mrs)
 				current_mrs = NULL;
 			list_del(ptr);
-			del_timer(&task->period_timer);
-			kfree(task);
 			break;
 		}
 	}
-	mutex_unlock(&mrs_mutex);
+	spin_unlock_irqrestore(&mrs_lock, flags);
+	del_timer(&mrs_task->period_timer);
+	kfree(mrs_task);
 
 	return 0;
 }
@@ -276,6 +282,12 @@ int mrs_write_proc(struct file *file, const char __user *buffer,
 	proc_buffer=kmalloc(count, GFP_KERNEL);
 	if (copy_from_user(proc_buffer, buffer, count))
 		return -EFAULT;
+	/*
+	 * TODO: error handling
+	 * 	- check if scanf worked (correct user input)
+	 *	- check register/yield/deregister return values
+	 *	  and print appropriate warning
+	 */
 	switch (*proc_buffer) {
 	case 'R':
 		sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
@@ -303,15 +315,16 @@ int mrs_read_proc(char *page, char **start, off_t off,
 {
 	char *ptr = page;
 	struct mrs_task_struct *mrs_task;
+	unsigned long flags;
 
-	mutex_lock(&mrs_mutex);
+	spin_lock_irqsave(&mrs_lock, flags);
 	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
 		// Output: PID Period ProccessingTime
 		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
 					mrs_task->period,
 					mrs_task->runtime);
 	}
-	mutex_unlock(&mrs_mutex);
+	spin_unlock_irqrestore(&mrs_lock, flags);
 
 	return ptr - page;
 }
@@ -338,6 +351,9 @@ static int _mrs_init(void)
 	// set proc functions
 	proc_file->read_proc = mrs_read_proc;
 	proc_file->write_proc = mrs_write_proc;
+	// init semaphore used by dispatcher
+	sema_init(&mrs_sem, 0);
+	current_mrs = NULL;
 	// create dispatcher thread (not started here)
 	dispatcher_thread = kthread_create(dispatch, NULL, THREAD_NAME);
         if (IS_ERR(dispatcher_thread)) {
@@ -348,7 +364,7 @@ static int _mrs_init(void)
                 return PTR_ERR(dispatcher_thread);
         }
 	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
-	current_mrs = NULL;
+	wake_up_process(dispatcher_thread);
         return 0;
 }
 
@@ -357,6 +373,7 @@ static void mrs_exit(void)
 {
 	struct list_head *ptr, *tmp;
 	struct mrs_task_struct *task;
+	unsigned long flags;
 	// remove proc directory and file
 	if (proc_file) {
 		remove_proc_entry(FILE_NAME, proc_file->parent);
@@ -364,15 +381,16 @@ static void mrs_exit(void)
 	}
 	// stop kernel thread
 	kthread_stop(dispatcher_thread);
+	up(&mrs_sem);
 	// free stats list
-	mutex_lock(&mrs_mutex);
+	spin_lock_irqsave(&mrs_lock, flags);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		list_del(ptr);
 		del_timer(&task->period_timer);
 		kfree(task);
 	}
-	mutex_unlock(&mrs_mutex);
+	spin_unlock_irqrestore(&mrs_lock, flags);
 }
 
 module_init(_mrs_init);
