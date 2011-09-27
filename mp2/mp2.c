@@ -13,6 +13,7 @@
 #define THREAD_NAME "mrs-dispatcher"
 #define MAX_PERIOD 0xffffffff
 #define MRS_PRIO MAX_USER_RT_PRIO - 1
+#define MRS_THRESHOLD 693
 
 enum mrs_state {NEW, SLEEPING, READY, RUNNING };
 
@@ -41,31 +42,29 @@ static int should_stop;
 // global current task
 static struct mrs_task_struct *current_mrs;
 
-
 // find task from task list
 static struct mrs_task_struct *_find_mrs_task(pid_t pid)
 {
-        struct mrs_task_struct *mrs_task;
-        list_for_each_entry(mrs_task, &mrs_tasks, list) {
-                if (mrs_task->task->pid == pid)
-                        return mrs_task;
-        }
+	struct mrs_task_struct *mrs_task;
+	list_for_each_entry(mrs_task, &mrs_tasks, list) {
+		if (mrs_task->task->pid == pid)
+			return mrs_task;
+	}
         return NULL;
 }
 
 static struct mrs_task_struct *_remove_mrs_task(pid_t pid)
 {
 	struct list_head *ptr, *tmp;
-	struct mrs_task_struct *mrs_task, *removed;
+	struct mrs_task_struct *mrs_task;
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
-		if(mrs_task->task->pid == pid) {
+		if (mrs_task->task->pid == pid) {
                         list_del(ptr);
-			removed = mrs_task;
-                        break;
+			return mrs_task;
                 }
         }
-	return removed;
+	return NULL;
 }
 
 // find task ready task with shortest period
@@ -175,6 +174,7 @@ struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 	if (mrs_task) {
 	        mrs_task->task = task;
 	        mrs_task->state = NEW;
+		INIT_LIST_HEAD(&mrs_task->list);
 	        mrs_task->period = period;
 		mrs_task->runtime = runtime;
 	        init_timer(&mrs_task->period_timer);
@@ -185,15 +185,13 @@ struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 }
 
 // admission control: returns 0 if can be admitted, 1 if can not be admitted
-static int _mrs_admission_control(unsigned int new_task_period,
-					unsigned int new_task_runtime)
+static int _mrs_admission_control(unsigned int period, unsigned int runtime)
 {
-	struct mrs_task_struct *position;
-	const unsigned int acceptance_value = 693;
-	unsigned int sum_ratio = (1000 * new_task_runtime) / new_task_period;
-	list_for_each_entry(position, &mrs_tasks, list)
-		sum_ratio += (1000 * position->runtime) / position->period;
-	return sum_ratio <= acceptance_value;
+	struct mrs_task_struct *pos;
+	unsigned int sum_ratio = (1000 * runtime) / period;
+	list_for_each_entry(pos, &mrs_tasks, list)
+		sum_ratio += (1000 * pos->runtime) / pos->period;
+	return sum_ratio > MRS_THRESHOLD;
 }
 
 /*
@@ -207,6 +205,7 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
+	int ret = 0;
 	if (period == 0 || runtime == 0)
 		return -EINVAL;
 	task = find_task_by_pid(pid);
@@ -218,17 +217,21 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 		return -ENOMEM;
 	// critical section: add task if admitted and not alrady present
 	spin_lock_irqsave(&mrs_lock, flags);
-	if (_mrs_admission_control(period, runtime))
+	if (_mrs_admission_control(period, runtime)) {
+		ret = -EBUSY;
 		goto err;
-	if (_find_mrs_task(pid))
+	}
+	if (_find_mrs_task(pid)) {
+		ret = -EEXIST;
 		goto err;
+	}
 	list_add_tail(&mrs_task->list, &mrs_tasks);
 	spin_unlock_irqrestore(&mrs_lock, flags);
 	return 0;
 err:
 	spin_unlock_irqrestore(&mrs_lock, flags);
 	kfree(mrs_task);
-	return -EAGAIN;
+	return ret;
 }
 
 // Handles yield calls from usermode app. Changes task state and wakes the
@@ -289,7 +292,7 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 	char *buf;
 	pid_t pid;
 	unsigned int period, runtime;
-	int ret = count;
+	int ret;
 
 	buf = kmalloc(count, GFP_KERNEL);
 	if (copy_from_user(buf, user_buf, count))
@@ -318,8 +321,10 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 		break;
 	}
 	kfree(buf);
-	if (count < 0)
+	if (ret < 0)
 		printk(KERN_ERR "mrs: write failed with error # %d.\n", ret);
+	else
+		ret = count;
 	return ret;
 }
 
@@ -335,8 +340,7 @@ int mrs_read_proc(char *page, char **start, off_t off,
 	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
 		// Output: PID Period ProccessingTime
 		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
-					mrs_task->period,
-					mrs_task->runtime);
+					mrs_task->period, mrs_task->runtime);
 	}
 	spin_unlock_irqrestore(&mrs_lock, flags);
 
