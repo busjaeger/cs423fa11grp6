@@ -51,6 +51,21 @@ static struct mrs_task_struct *_find_mrs_task(pid_t pid)
         return NULL;
 }
 
+static struct mrs_task_struct *_remove_mrs_task(pid_t pid)
+{
+	struct list_head *ptr, *tmp;
+	struct mrs_task_struct *mrs_task, *removed;
+	list_for_each_safe(ptr, tmp, &mrs_tasks) {
+		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
+		if(mrs_task->task->pid == pid) {
+                        list_del(ptr);
+			removed = mrs_task;
+                        break;
+                }
+        }
+	return removed;
+}
+
 // find task ready task with shortest period
 static struct mrs_task_struct *_find_next_mrs_task(void)
 {
@@ -250,24 +265,18 @@ err:
 // Remove a task from the list, delete its timer, and free it
 static int deregister_mrs_task(pid_t pid)
 {
-	struct list_head *ptr, *tmp;
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
-
 	spin_lock_irqsave(&mrs_lock, flags);
-	list_for_each_safe(ptr, tmp, &mrs_tasks) {
-		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
-		if(mrs_task->task->pid == pid) {
-			if(mrs_task == current_mrs)
-				current_mrs = NULL;
-			list_del(ptr);
-			break;
-		}
-	}
+	mrs_task =_remove_mrs_task(pid);
+	// TODO do we need to let the dispatcher know?
+	if (mrs_task == current_mrs)
+		current_mrs = NULL;
 	spin_unlock_irqrestore(&mrs_lock, flags);
-	del_timer(&mrs_task->period_timer);
-	kfree(mrs_task);
-
+	if (mrs_task) {
+		del_timer(&mrs_task->period_timer);
+		kfree(mrs_task);
+	}
 	return 0;
 }
 

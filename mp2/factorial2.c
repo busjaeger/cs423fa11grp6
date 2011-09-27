@@ -27,9 +27,9 @@ void signal_callback_handler(int signum)
  // test app entry point
 int main(void)
 {
-    FILE *fp;
-    size_t count;
-    int i, j, in_pid;
+	FILE *fp;
+	size_t count;
+	int i, j, in_pid;
 	unsigned int in_period, in_runtime;
 	bool bFound = false;
 	bool registered = false;
@@ -38,16 +38,16 @@ int main(void)
 	
 	signal(SIGINT, signal_callback_handler);
  
-    fp = fopen("/proc/mp2/status", "r+");
-    if(fp == NULL) {
-        perror("Failed to open proc file!\n");
-        ret = EXIT_FAILURE;
+	fp = fopen("/proc/mp2/status", "r+");
+	if(fp == NULL) {
+		perror("Failed to open proc file!\n");
+		ret = EXIT_FAILURE;
 		goto cleanup;
-    }
-	
+	}
+
 	//Register app
-    count = fprintf(fp, "R %d %u %u", pid, PERIOD, RUNTIME);
-	
+	count = fprintf(fp, "R %d %u %u", pid, PERIOD, RUNTIME);
+
 	// Check if we registered successfully
 	while(fscanf(fp, "%d %u %u", in_pid, in_period, in_runtime)!=EOF) {
 		if(in_pid == pid) {
@@ -61,13 +61,13 @@ int main(void)
 		goto cleanup;
 	}
 	registered = true;
-    printf("Registered successfully. PID is %d\n", count, pid);
-	
+	printf("Registered successfully. PID is %d\n", count, pid);
+
 	// Tell scheduler we are ready
 	count = fprintf(fp, "Y %d", pid);
-	
+
 	printf("Doing math. Press CTRL+C to stop...\n");
-	
+
 	// Start of real time loop
 	while(bContinue && j<LOOPS) {
 		for(i=0; i<RUNS_PER_LOOP; i++) {
@@ -80,7 +80,7 @@ int main(void)
 		count = fprintf(fp, "Y %d", pid);
 	}
 	// End of real time scheduling loop
-	
+
 	printf("Math done. Press enter key to exit...");
 	getchar();
 
@@ -89,7 +89,7 @@ cleanup:
 		count = fprintf(fp, "D %d", pid);
 	if(fp!=NULL)
 		fclose(fp);
-    return ret;
+	return ret;
 }
 
 // calculates factorial
