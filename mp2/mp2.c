@@ -407,6 +407,7 @@ static void mrs_exit(void)
 	should_stop = 1;
 	up(&mrs_sem);
 	spin_unlock_irqrestore(&mrs_lock, flags);
+	kthread_stop(dispatcher_thread);
 }
 
 module_init(_mrs_init);
