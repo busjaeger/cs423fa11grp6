@@ -336,7 +336,7 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 	}
 	kfree(buf);
 	if (ret < 0)
-		printk(KERN_ERR "mrs: %s failed with error %d.\n", buf, ret);
+		printk(KERN_ERR "mrs: proc write failed with error %d.\n", ret);
 	else
 		ret = count;
 	return ret;
