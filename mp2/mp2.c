@@ -130,8 +130,7 @@ static int dispatch(void *data)
 	while(1) {
 		down(&mrs_sem);
 		spin_lock_irqsave(&mrs_lock, flags);
-		
-		if (kthread_should_stop())
+		if (should_stop)
 			break;
 		_mrs_schedule();
 		spin_unlock_irqrestore(&mrs_lock, flags);
