@@ -36,6 +36,8 @@ static DEFINE_SPINLOCK(mrs_lock);
 static struct semaphore mrs_sem;
 // dispatcher thread
 static struct task_struct *dispatcher_thread;
+// thread control flag
+static int should_stop;
 // global current task
 static struct mrs_task_struct *current_mrs;
 
@@ -95,11 +97,9 @@ static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
 	return sched_setscheduler(task, policy, &sparam);
 }
 
-static void mrs_schedule(void)
+static void _mrs_schedule(void)
 {
 	struct mrs_task_struct *next;
-	unsigned long flags;
-	spin_lock_irqsave(&mrs_lock, flags);
 	// current task was put to sleep, so reset priority and unset current
 	if (current_mrs && current_mrs->state == SLEEPING) {
 		_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
@@ -121,17 +121,20 @@ static void mrs_schedule(void)
 		wake_up_process(next->task);
 		current_mrs = next;
 	}
-	spin_unlock_irqrestore(&mrs_lock, flags);
 }
 
 // dispatcher thread function
 static int dispatch(void *data)
 {
+	unsigned long flags;
 	while(1) {
 		down(&mrs_sem);
+		spin_lock_irqsave(&mrs_lock, flags);
+		
 		if (kthread_should_stop())
 			break;
-		mrs_schedule();
+		_mrs_schedule();
+		spin_unlock_irqrestore(&mrs_lock, flags);
 	}
 	return 0;
 }
@@ -375,6 +378,7 @@ static int _mrs_init(void)
                 remove_proc_entry(DIR_NAME, NULL);
                 return PTR_ERR(dispatcher_thread);
         }
+	should_stop = 0;
 	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
 	wake_up_process(dispatcher_thread);
         return 0;
@@ -391,9 +395,7 @@ static void mrs_exit(void)
 		remove_proc_entry(FILE_NAME, proc_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
 	}
-	// stop kernel thread
-	kthread_stop(dispatcher_thread);
-	up(&mrs_sem);
+	spin_lock_irqsave(&mrs_lock, flags);
 	// free stats list
 	spin_lock_irqsave(&mrs_lock, flags);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
@@ -402,6 +404,9 @@ static void mrs_exit(void)
 		del_timer(&task->period_timer);
 		kfree(task);
 	}
+	// stop kernel thread
+	should_stop = 1;
+	up(&mrs_sem);
 	spin_unlock_irqrestore(&mrs_lock, flags);
 }
 
