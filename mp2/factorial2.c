@@ -49,7 +49,7 @@ int main(void)
     count = fprintf(fp, "R %d %u %u", pid, PERIOD, RUNTIME);
 	
 	// Check if we registered successfully
-	while(fscanf(fp, "%d %u %u", &in_pid, &in_period, &in_runtime)!= EOF) {
+	while(fscanf(fp, "%d %u %u", in_pid, in_period, in_runtime)!=EOF) {
 		if(in_pid == pid) {
 			bFound = true;
 			break;

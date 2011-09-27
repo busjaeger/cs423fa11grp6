@@ -6,5 +6,5 @@ all:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build SUBDIRS=$(PWD) clean
 
-factorial: factorial.c
-	gcc -g factorial.c -o factorial
+factorial: factorial2.c
+	gcc -g factorial2.c -o factorial

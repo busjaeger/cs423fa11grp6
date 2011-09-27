@@ -1,10 +1,3 @@
-/*
- * TODO possible considerations
- *  could the task struct become invalid while referenced?
- *  could the mrs_task / task state get inconsistent?
- *  think through locking strategy; streamline locking
- */
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -40,11 +33,11 @@ static DEFINE_MUTEX(mrs_mutex);
 // dispatcher thread
 static struct task_struct *dispatcher_thread;
 // global current task
-static struct mrs_task_struct *currently_running_task;
+static struct mrs_task_struct *current_mrs;
 
 
 // find task from task list
-struct mrs_task_struct *_find_mrs_task(pid_t pid)
+static struct mrs_task_struct *_find_mrs_task(pid_t pid)
 {
         struct mrs_task_struct *mrs_task;
         list_for_each_entry(mrs_task, &mrs_tasks, list) {
@@ -54,107 +47,135 @@ struct mrs_task_struct *_find_mrs_task(pid_t pid)
         return NULL;
 }
 
+// find task ready task with shortest period
+static struct mrs_task_struct *_find_next_mrs_task()
+{
+	struct mrs_task_struct *pos, *next_ready = NULL;
+	unsigned int sp = MAX_PERIOD;
+	list_for_each_entry(pos, &mrs_tasks, list) {
+		if (pos->state == READY && pos->period < sp) {
+			sp = pos->period;
+			next_ready = pos;
+                }
+	}
+	return next_ready;
+}
+
+// updates the task timer
+static inline int _mod_period_timer(struct mrs_task_struct *mrs_task)
+{
+	unsigned long expires = jiffies + msecs_to_jiffies(mrs_task->period);
+	return mod_timer(&mrs_task->period_timer, expires);
+}
+
+// Updates task scheduling policy
+static inline int _mrs_sched_setscheduler(struct task_struct *task, int policy,
+								int priority)
+{
+	struct sched_param sparam = { priority };
+	return sched_setscheduler(task, policy, &sparam);
+}
+
 // dispatcher thread function
 static int dispatch(void *data)
 {
-	struct mrs_task_struct *position = NULL;
-	struct mrs_task_struct *task_with_highest_priority = NULL;
-	unsigned int shortest_period = MAX_PERIOD;
-	struct sched_param *sparam = NULL;
+	struct mrs_task_struct *next_ready;
 
 	while(1) {
-		if (kthread_should_stop()) {
+		if (kthread_should_stop())
 			break;
+		mutex_lock(&mrs_mutex);
+		// current task put to sleep > reset priority and unset current
+		if (current_mrs && current_mrs->state == SLEEPING) {
+			_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
+			current_mrs = NULL;
 		}
-		// find ready job from list w/ highest priority (shortest period)
-		position = NULL;
-		task_with_highest_priority = NULL;
-		shortest_period = MAX_PERIOD;
-		sparam = NULL;
-		list_for_each_entry(position, &mrs_tasks, list) {
-			if (position->state == READY) {
-				if (position->period < shortest_period ) {
-					task_with_highest_priority = position;
-				}
+		// if another task with higher priority is ready, switch to it
+		next_ready = _find_next_mrs_task();
+		if (next_ready &&
+			(!current_mrs || current_mrs->period > next_ready->period)) {
+			// preempt current task if present
+			if (current_mrs) {
+				current_mrs->state = READY;
+				_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
+				// we don't want this task to run with normal priority
+				set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
 			}
+			next_ready->state = RUNNING;
+			_mrs_sched_setscheduler(next_ready->task, SCHED_FIFO, 
+							MAX_USER_RT_PRIO - 1);
+			wake_up_process(next_ready->task);
+			current_mrs = next_ready;
 		}
-		// set task to FIFO
-		// set task to RUNNING
-		// if previously RUNNING -> change to NORMAL prio & READY
-		// update global task
-		if (task_with_highest_priority) {
-			// TODO Not sure about the order of these lines:
-			wake_up_process(task_with_highest_priority->task);
-			sparam->sched_priority = MAX_USER_RT_PRIO - 1;
-			task_with_highest_priority->state = RUNNING;
-			sched_setscheduler(task_with_highest_priority->task, SCHED_FIFO, sparam);
-
-			sparam->sched_priority = 0;
-			currently_running_task->state = READY;
-			sched_setscheduler(currently_running_task->task, SCHED_NORMAL, sparam);
-
-			currently_running_task = task_with_highest_priority;
-		}
-		// else TODO need to do anything in this case?		
+		// put dispatcher to sleep and let scheduler pick next task
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		mutex_unlock(&mrs_mutex);
+		schedule();
 	}
 	return 0;
 }
 
-// timer callback
-void period_timeout(unsigned long data)
+// timer callback - wakes dispatcher
+void _period_timeout(unsigned long data)
 {
+	// TODO the mrs task could have been released during deregister
 	struct mrs_task_struct *mrs_task = (struct mrs_task_struct *)data;
 	switch (mrs_task->state) {
-		case NEW:
-			printk(KERN_ALERT "mrs: timer triggered for new task %d.\n", mrs_task->task->pid);
-			break;
-		case SLEEPING:
-			mrs_task->state = READY;
-			wake_up_process(dispatcher_thread);
-			break;
-		case READY:
-			printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n", mrs_task->task->pid);
-			break;
-		case RUNNING:
-			printk(KERN_WARNING "mrs: timer triggered for running task %d.\n", mrs_task->task->pid);
-			break;
+	case NEW:
+		printk(KERN_ALERT "mrs: timer triggered for new task %d.\n",
+				mrs_task->task->pid);
+		break;
+	case SLEEPING:
+		mrs_task->state = READY;
+		_mod_period_timer(mrs_task);
+		// will trigger reschedule on interrupt exit
+		wake_up_process(dispatcher_thread);
+		break;
+	case READY:
+		printk(KERN_ALERT "mrs: timer triggered for ready task %d.\n",
+				mrs_task->task->pid);
+		break;
+	case RUNNING:
+		printk(KERN_WARNING "mrs: timer triggered for running task %d.\n",
+				mrs_task->task->pid);
+		break;
 	}
 }
 
 // allocate and initialize a task
-struct mrs_task_struct *create_mrs_task(struct task_struct *task,
+struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 				unsigned int period, unsigned int runtime)
 {
-        struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
+	struct mrs_task_struct *mrs_task = kmalloc(sizeof(*mrs_task), GFP_KERNEL);
 	if (mrs_task) {
 	        mrs_task->task = task;
 	        mrs_task->state = NEW;
 	        mrs_task->period = period;
 		mrs_task->runtime = runtime;
 	        init_timer(&mrs_task->period_timer);
-	        mrs_task->period_timer.function = period_timeout;
+	        mrs_task->period_timer.function = _period_timeout;
 	        mrs_task->period_timer.data = (unsigned long)mrs_task;
 	}
 	return mrs_task;
 }
 
 // admission control: returns 0 if can be admitted, 1 if can not be admitted
-static int _mrs_admission_control(unsigned int new_task_period, unsigned int new_task_runtime)
+static int _mrs_admission_control(unsigned int new_task_period,
+					unsigned int new_task_runtime)
 {
-	struct mrs_task_struct *position = NULL;
-	unsigned int acceptance_value = 693;
-	int rvalue = 1;
-	unsigned int sum_ratio = new_task_runtime / new_task_period;
-	list_for_each_entry(position, &mrs_tasks, list) {
-		sum_ratio = sum_ratio + (position->runtime / position->period);
-	}
-	if ((sum_ratio * 1000) <= acceptance_value) {
-		rvalue = 0;
-	}	
-	return rvalue;
+	struct mrs_task_struct *position;
+	const unsigned int acceptance_value = 693;
+	unsigned int sum_ratio = (1000 * new_task_runtime) / new_task_period;
+	list_for_each_entry(position, &mrs_tasks, list)
+		sum_ratio += (1000 * position->runtime) / position->period;
+	return sum_ratio <= acceptance_value;
 }
 
-static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtime)
+// Verifies that a PID is valid, passes admission control, and isn't already 
+// registered. If verificaiton succeeds, creates a new task entry and adds it
+// to the list.
+static int register_mrs_task(pid_t pid, unsigned int period,
+				unsigned int runtime)
 {
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
@@ -178,7 +199,7 @@ static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtim
 		mutex_unlock(&mrs_mutex);
 		return -1;
 	}
-	mrs_task = create_mrs_task(task, period, runtime);
+	mrs_task = _create_mrs_task(task, period, runtime);
 	if (!mrs_task) {
 		mutex_unlock(&mrs_mutex);
 		return -ENOMEM;
@@ -188,40 +209,63 @@ static int register_mrs_task(pid_t pid, unsigned int period, unsigned int runtim
 	return 0;
 }
 
+// Handles yield calls from usermode app. Changes task state and wakes the
+// dispatcher thread
 static int yield_msr_task(pid_t pid)
 {
 	struct mrs_task_struct *mrs_task;
 	mutex_lock(&mrs_mutex);
 	mrs_task = _find_mrs_task(pid);
-	mutex_unlock(&mrs_mutex);
 	if (!mrs_task) {
 		printk(KERN_ERR "mrs: pid %d not registered.\n", pid);
-		return -1;
+		goto err;
 	}
 	switch (mrs_task->state) {
-		case NEW:
-			// TODO locking, weak up dispatcher
-			mrs_task->state = READY;
-			break;
-		case RUNNING:
-			// TODO locking, wake up dispatcher, set timer
-			mrs_task->state = SLEEPING;
-	                __set_current_state(TASK_UNINTERRUPTIBLE);
-			schedule();
-			break;
-		default:
-			printk(KERN_ERR "mrs: invalid state transition attempted.\n");
-			return -1;
+	case NEW:
+		mrs_task->state = READY;
+		_mod_period_timer(mrs_task);
+		break;
+	case RUNNING:
+		mrs_task->state = SLEEPING;
+		break;
+	default:
+		printk(KERN_ERR "mrs: invalid state transition attempted.\n");
+		goto err;
 	}
+	__set_current_state(TASK_UNINTERRUPTIBLE);
+	wake_up_process(dispatcher_thread);
+	mutex_unlock(&mrs_mutex);
+	schedule();
 	return 0;
+err:
+	mutex_unlock(&mrs_mutex);
+	return -1;
 }
 
-// TODO set global task null, remove from list, remove timer?
+// Remove a task from the list, delete its timer, and free it
 static int deregister_mrs_task(pid_t pid)
 {
+	struct list_head *ptr, *tmp;
+	struct mrs_task_struct *task;
+
+	mutex_lock(&mrs_mutex);
+	list_for_each_safe(ptr, tmp, &mrs_tasks) {
+		task = list_entry(ptr, struct mrs_task_struct, list);
+		if(task->task->pid == pid) {
+			if(task == current_mrs)
+				current_mrs = NULL;
+			list_del(ptr);
+			del_timer(&task->period_timer);
+			kfree(task);
+			break;
+		}
+	}
+	mutex_unlock(&mrs_mutex);
+
 	return 0;
 }
 
+// Get input from usermode app and take action on it
 int mrs_write_proc(struct file *file, const char __user *buffer,
                         unsigned long count, void *data)
 {
@@ -230,53 +274,64 @@ int mrs_write_proc(struct file *file, const char __user *buffer,
 	unsigned int period, runtime;
 
 	proc_buffer=kmalloc(count, GFP_KERNEL);
-	if (copy_from_user(proc_buffer, buffer, count)) {
+	if (copy_from_user(proc_buffer, buffer, count))
 		return -EFAULT;
-	}
-	// TODO error handling
 	switch (*proc_buffer) {
-		case 'R':
-			sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
-			register_mrs_task(pid, period, runtime);
-			break;
-		case 'Y':
-			sscanf(proc_buffer, "Y %d", &pid);
-			yield_msr_task(pid);
-			break;
-		case 'D':
-			sscanf(proc_buffer, "D %d", &pid);
-			deregister_mrs_task(pid);
-			break;
-		default:
-	                printk(KERN_ERR "mrs: invalid write command.\n");
-	                return count = -1;
+	case 'R':
+		sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
+		register_mrs_task(pid, period, runtime);
+		break;
+	case 'Y':
+		sscanf(proc_buffer, "Y %d", &pid);
+		yield_msr_task(pid);
+		break;
+	case 'D':
+		sscanf(proc_buffer, "D %d", &pid);
+		deregister_mrs_task(pid);
+		break;
+	default:
+                printk(KERN_ERR "mrs: invalid write command.\n");
+                return count = -1;
 	}
 	kfree(proc_buffer);
 	return count;
 }
 
-/*
- * TODO read real time task list
- */
+// Print registered process list to proc special file
 int mrs_read_proc(char *page, char **start, off_t off,
                         int count, int *eof, void *data)
 {
-	return 0;
+	char *ptr = page;
+	struct mrs_task_struct *mrs_task;
+
+	mutex_lock(&mrs_mutex);
+	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
+		// Output: PID Period ProccessingTime
+		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
+					mrs_task->period,
+					mrs_task->runtime);
+	}
+	mutex_unlock(&mrs_mutex);
+
+	return ptr - page;
 }
 
-// module init
-static int mrs_init(void)
+// module init - sets up structes, registeres proc file and creates the
+// dispatcher kthread
+static int _mrs_init(void)
 {
 	struct proc_dir_entry *proc_dir;
 	// create proc directory and file
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!proc_dir) {
-		printk(KERN_ERR "mrs: unable to create proc directory %s.\n", DIR_NAME);
+		printk(KERN_ERR "mrs: unable to create proc directory %s.\n",
+								DIR_NAME);
 		return -ENOMEM;
 	}
 	proc_file = create_proc_entry(FILE_NAME, S_IRUGO | S_IWUGO, proc_dir);
 	if (!proc_file) {
-		printk(KERN_ERR "mrs: unable to create proc file %s.\n", FILE_NAME);
+		printk(KERN_ERR "mrs: unable to create proc file %s.\n",
+								FILE_NAME);
 		remove_proc_entry(DIR_NAME, NULL);
 		return -ENOMEM;
 	}
@@ -286,18 +341,18 @@ static int mrs_init(void)
 	// create dispatcher thread (not started here)
 	dispatcher_thread = kthread_create(dispatch, NULL, THREAD_NAME);
         if (IS_ERR(dispatcher_thread)) {
-                printk(KERN_ERR "mrs: failed to create kernel thread %s.\n", THREAD_NAME);
+		printk(KERN_ERR "mrs: failed to create kernel thread %s.\n",
+				THREAD_NAME);
                 remove_proc_entry(FILE_NAME, proc_dir);
                 remove_proc_entry(DIR_NAME, NULL);
                 return PTR_ERR(dispatcher_thread);
         }
-	currently_running_task = NULL;
+	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
+	current_mrs = NULL;
         return 0;
 }
 
-/**
- * releases module resources and frees dynamically allocated data
- */
+// releases module resources and frees dynamically allocated data
 static void mrs_exit(void)
 {
 	struct list_head *ptr, *tmp;
@@ -307,20 +362,20 @@ static void mrs_exit(void)
 		remove_proc_entry(FILE_NAME, proc_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
 	}
-        // stop kernel thread
-        kthread_stop(dispatcher_thread);
+	// stop kernel thread
+	kthread_stop(dispatcher_thread);
 	// free stats list
 	mutex_lock(&mrs_mutex);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		list_del(ptr);
-		// TODO stop timer?
+		del_timer(&task->period_timer);
 		kfree(task);
 	}
 	mutex_unlock(&mrs_mutex);
 }
 
-module_init(mrs_init);
+module_init(_mrs_init);
 module_exit(mrs_exit);
 
 MODULE_LICENSE("GPL");
