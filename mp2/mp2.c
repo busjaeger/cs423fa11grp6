@@ -281,41 +281,44 @@ static int deregister_mrs_task(pid_t pid)
 }
 
 // Get input from usermode app and take action on it
-int mrs_write_proc(struct file *file, const char __user *buffer,
+int mrs_write_proc(struct file *file, const char __user *user_buf,
                         unsigned long count, void *data)
 {
-	char *proc_buffer;
+	char *buf;
 	pid_t pid;
 	unsigned int period, runtime;
+	int ret = count;
 
-	proc_buffer=kmalloc(count, GFP_KERNEL);
-	if (copy_from_user(proc_buffer, buffer, count))
+	buf = kmalloc(count, GFP_KERNEL);
+	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
-	/*
-	 * TODO: error handling
-	 * 	- check if scanf worked (correct user input)
-	 *	- check register/yield/deregister return values
-	 *	  and print appropriate warning
-	 */
-	switch (*proc_buffer) {
+	switch (*buf) {
 	case 'R':
-		sscanf(proc_buffer, "R %d %u %u", &pid, &period, &runtime);
-		register_mrs_task(pid, period, runtime);
+		if (sscanf(buf, "R %d %u %u", &pid, &period, &runtime) != 3)
+			ret = -EINVAL;
+		else
+			ret = register_mrs_task(pid, period, runtime);
 		break;
 	case 'Y':
-		sscanf(proc_buffer, "Y %d", &pid);
-		yield_msr_task(pid);
+		if (sscanf(buf, "Y %d", &pid) != 1)
+			ret = -EINVAL;
+		else
+			ret = yield_msr_task(pid);
 		break;
 	case 'D':
-		sscanf(proc_buffer, "D %d", &pid);
-		deregister_mrs_task(pid);
+		if (sscanf(buf, "D %d", &pid) != 1)
+			ret = -EINVAL;
+		else
+			ret = deregister_mrs_task(pid);
 		break;
 	default:
-                printk(KERN_ERR "mrs: invalid write command.\n");
-                return count = -1;
+		ret = -EINVAL;
+		break;
 	}
-	kfree(proc_buffer);
-	return count;
+	kfree(buf);
+	if (count < 0)
+		printk(KERN_ERR "mrs: write failed with error # %d.\n", ret);
+	return ret;
 }
 
 // Print registered process list to proc special file
