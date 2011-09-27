@@ -127,7 +127,9 @@ static int dispatch(void *data)
 {
 	unsigned long flags;
 	while(1) {
+		printk(KERN_INFO "mrs: dispatcher down.\n");
 		down(&mrs_sem);
+		printk(KERN_INFO "mrs: dispatcher awake.\n");
 		spin_lock_irqsave(&mrs_lock, flags);
 		if (should_stop)
 			break;
@@ -143,27 +145,31 @@ void period_timeout(unsigned long data)
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
 	pid_t pid = (pid_t)data;
+	int err;
 
+	printk(KERN_INFO "mrs: timer triggered for %d.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task = _find_mrs_task(pid);
-        if (!mrs_task)
-                goto err;
+        if (!mrs_task) {
+		err = -ESRCH;
+                goto error;
+	}
 	_mod_period_timer(mrs_task);
 	switch (mrs_task->state) {
-	case NEW:
-	case READY:
-	case RUNNING:
-		goto err;
 	case SLEEPING:
 		mrs_task->state = READY;
-		up(&mrs_sem); //move after spin unlock?
+		up(&mrs_sem);
 		break;
+	default:
+		err = -EPERM;
+		goto error;
 	}
         spin_unlock_irqrestore(&mrs_lock, flags);
+	printk(KERN_INFO "mrs: timer complete for %d.\n", pid);
 	return;
-err:
+error:
         spin_unlock_irqrestore(&mrs_lock, flags);
-	printk(KERN_ALERT "mrs: timer triggered for awake task %d.\n", pid);
+	printk(KERN_WARNING "mrs: timer failed with error %d.\n", err);
 }
 
 // allocate and initialize a task
@@ -179,7 +185,7 @@ struct mrs_task_struct *_create_mrs_task(struct task_struct *task,
 		mrs_task->runtime = runtime;
 	        init_timer(&mrs_task->period_timer);
 	        mrs_task->period_timer.function = period_timeout;
-	        mrs_task->period_timer.data = (unsigned long)mrs_task;
+	        mrs_task->period_timer.data = mrs_task->task->pid;
 	}
 	return mrs_task;
 }
@@ -205,7 +211,7 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 	struct task_struct *task;
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
-	int ret = 0;
+	int err = -1;
 	if (period == 0 || runtime == 0)
 		return -EINVAL;
 	task = find_task_by_pid(pid);
@@ -218,20 +224,20 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 	// critical section: add task if admitted and not alrady present
 	spin_lock_irqsave(&mrs_lock, flags);
 	if (_mrs_admission_control(period, runtime)) {
-		ret = -EBUSY;
-		goto err;
+		err = -EBUSY;
+		goto error;
 	}
 	if (_find_mrs_task(pid)) {
-		ret = -EEXIST;
-		goto err;
+		err = -EEXIST;
+		goto error;
 	}
 	list_add_tail(&mrs_task->list, &mrs_tasks);
 	spin_unlock_irqrestore(&mrs_lock, flags);
 	return 0;
-err:
+error:
 	spin_unlock_irqrestore(&mrs_lock, flags);
 	kfree(mrs_task);
-	return ret;
+	return err;
 }
 
 // Handles yield calls from usermode app. Changes task state and wakes the
@@ -240,11 +246,15 @@ static int yield_msr_task(pid_t pid)
 {
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
+	int err = -1;
 
+	printk(KERN_INFO "mrs: %d yielding.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task = _find_mrs_task(pid);
-	if (!mrs_task)
-		goto err;
+	if (!mrs_task) {
+		err = -ESRCH;
+		goto error;
+	}
 	switch (mrs_task->state) {
 	case NEW:
 		mrs_task->state = READY;
@@ -254,17 +264,19 @@ static int yield_msr_task(pid_t pid)
 		mrs_task->state = SLEEPING;
 		break;
 	default:
-		printk(KERN_ERR "mrs: invalid state transition attempted.\n");
-		goto err;
+		err = -EPERM;
+		goto error;
 	}
 	__set_current_state(TASK_UNINTERRUPTIBLE);
-	up(&mrs_sem);// TODO switch order with unlock?
+	up(&mrs_sem);
 	spin_unlock_irqrestore(&mrs_lock, flags);
+	printk(KERN_INFO "mrs: %d yield before schedule.\n", pid);
 	schedule();
+	printk(KERN_INFO "mrs: %d yield after schedule.\n", pid);
 	return 0;
-err:
+error:
 	spin_unlock_irqrestore(&mrs_lock, flags);
-	return -1;
+	return err;
 }
 
 // Remove a task from the list, delete its timer, and free it
@@ -272,6 +284,7 @@ static int deregister_mrs_task(pid_t pid)
 {
 	struct mrs_task_struct *mrs_task;
 	unsigned long flags;
+	printk(KERN_INFO "mrs: %d deregistering.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task =_remove_mrs_task(pid);
 	// TODO do we need to let the dispatcher know?
@@ -282,6 +295,7 @@ static int deregister_mrs_task(pid_t pid)
 		del_timer(&mrs_task->period_timer);
 		kfree(mrs_task);
 	}
+	printk(KERN_INFO "mrs: %d deregistering complete.\n", pid);
 	return 0;
 }
 
@@ -322,7 +336,7 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 	}
 	kfree(buf);
 	if (ret < 0)
-		printk(KERN_ERR "mrs: write failed with error # %d.\n", ret);
+		printk(KERN_ERR "mrs: %s failed with error %d.\n", buf, ret);
 	else
 		ret = count;
 	return ret;
@@ -352,19 +366,17 @@ int mrs_read_proc(char *page, char **start, off_t off,
 static int _mrs_init(void)
 {
 	struct proc_dir_entry *proc_dir;
+	int err;
 	// create proc directory and file
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!proc_dir) {
-		printk(KERN_ERR "mrs: unable to create proc directory %s.\n",
-								DIR_NAME);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto error;
 	}
 	proc_file = create_proc_entry(FILE_NAME, S_IRUGO | S_IWUGO, proc_dir);
 	if (!proc_file) {
-		printk(KERN_ERR "mrs: unable to create proc file %s.\n",
-								FILE_NAME);
-		remove_proc_entry(DIR_NAME, NULL);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto error_rmd;
 	}
 	// set proc functions
 	proc_file->read_proc = mrs_read_proc;
@@ -375,16 +387,20 @@ static int _mrs_init(void)
 	// create dispatcher thread (not started here)
 	dispatcher_thread = kthread_create(dispatch, NULL, THREAD_NAME);
         if (IS_ERR(dispatcher_thread)) {
-		printk(KERN_ERR "mrs: failed to create kernel thread %s.\n",
-				THREAD_NAME);
-                remove_proc_entry(FILE_NAME, proc_dir);
-                remove_proc_entry(DIR_NAME, NULL);
-                return PTR_ERR(dispatcher_thread);
+		err = PTR_ERR(dispatcher_thread);
+		goto error_rm;
         }
 	should_stop = 0;
 	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
 	wake_up_process(dispatcher_thread);
         return 0;
+error_rm:
+	remove_proc_entry(FILE_NAME, proc_dir);
+error_rmd:
+	remove_proc_entry(DIR_NAME, NULL);
+error:
+	printk(KERN_ERR "mrs: module failed to init due to %d.\n", err);
+	return err;
 }
 
 // releases module resources and frees dynamically allocated data
