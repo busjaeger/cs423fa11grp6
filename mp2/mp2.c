@@ -396,13 +396,13 @@ static void mrs_exit(void)
 	}
 	spin_lock_irqsave(&mrs_lock, flags);
 	// free stats list
-	spin_lock_irqsave(&mrs_lock, flags);
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
 		list_del(ptr);
 		del_timer(&task->period_timer);
 		kfree(task);
 	}
+	current_mrs = NULL;
 	// stop kernel thread
 	should_stop = 1;
 	up(&mrs_sem);
