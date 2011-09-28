@@ -42,15 +42,20 @@ static int should_stop;
 // global current task
 static struct mrs_task_struct *current_mrs;
 
-//static struct task_struct *sleeping;
 
 // find task from task list
-static struct mrs_task_struct *_find_mrs_task(pid_t pid)
+static struct mrs_task_struct * _find_mrs_task(pid_t pid)
 {
-	printk(KERN_INFO "mrs: find_mrs_task: pid passed in: %d\n", pid);
+	printk(KERN_INFO "mrs: find_mrs_task: pid passed in: %d\n", pid);	
 	struct mrs_task_struct *mrs_task;
+	struct task_struct *temp = NULL;
+	temp = find_task_by_pid(pid);
+	if (temp) {
+		printk(KERN_INFO "mrs: find_task_by_pid: %d\n", temp->pid);
+	}
 	list_for_each_entry(mrs_task, &mrs_tasks, list) {
 		printk(KERN_INFO "mrs: find_mrs_task: contains %d\n", mrs_task->task->pid);
+		printk(KERN_INFO "mrs: find_mrs_task: tgid: %d\n", mrs_task->task->tgid);
 		if (mrs_task->task->pid == pid)
 			return mrs_task;
 	}
@@ -155,11 +160,6 @@ void period_timeout(unsigned long data)
 	pid_t pid = (pid_t)data;
 	int err;
 
-	/*if (sleeping) {
-		pid = (pid_t)sleeping->pid;
-		printk(KERN_INFO "mrs: period_timeout: sleeping task %d.\n", pid);
-		sleeping = NULL;
-	}*/
 	printk(KERN_INFO "mrs: timer triggered for %d.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task = _find_mrs_task(pid);
@@ -420,7 +420,6 @@ static int _mrs_init(void)
 	// init semaphore used by dispatcher
 	sema_init(&mrs_sem, 0);
 	current_mrs = NULL;
-	//sleeping = NULL;
 	// create dispatcher thread (not started here)
 	dispatcher_thread = kthread_create(dispatch, NULL, THREAD_NAME);
         if (IS_ERR(dispatcher_thread)) {
