@@ -5,11 +5,11 @@
 #include <signal.h>
 #include <stdbool.h>
 
-#define PERIOD	1
-#define RUNTIME	1
+#define PERIOD	100
+#define RUNTIME	15
 
-#define LOOPS 1000
-#define RUNS_PER_LOOP 100000000
+#define LOOPS 20
+#define RUNS_PER_LOOP 50000
 #define VAL_TO_FAC 20LLU
  
 unsigned long long fac(unsigned long long in);
@@ -29,12 +29,13 @@ int main(void)
 {
 	FILE *fp;
 	size_t count;
-	int i, j, in_pid;
+	int i, j = 0, l, in_pid;
 	unsigned int in_period, in_runtime;
 	bool bFound = false;
 	bool registered = false;
 	int pid = (int)getpid();
 	int ret = EXIT_SUCCESS;
+	char buf[20];
 	
 	signal(SIGINT, signal_callback_handler);
  
@@ -47,6 +48,7 @@ int main(void)
 
 	//Register app
 	count = fprintf(fp, "R %d %u %u", pid, PERIOD, RUNTIME);
+	fflush(fp);
 
 	// Check if we registered successfully
 	while(fscanf(fp, "%d %u %u", &in_pid, &in_period, &in_runtime)!=EOF) {
@@ -60,11 +62,17 @@ int main(void)
 		ret = EXIT_FAILURE;
 		goto cleanup;
 	}
+	rewind(fp);
 	registered = true;
-	printf("Registered successfully. PID is %d\n", count, pid);
+	printf("Registered successfully. PID is %d\n", pid);
 
+	buf[0] = 'Y';
+	buf[1] = ' ';
+	l = sprintf(&(buf[2]), "%d", pid) + 3;
 	// Tell scheduler we are ready
-	count = fprintf(fp, "Y %d", pid);
+	//count = fprintf(fp, "Y %d", pid);
+	fwrite(buf, sizeof(char), l, fp);
+	fflush(fp);
 
 	printf("Doing math. Press CTRL+C to stop...\n");
 
@@ -77,12 +85,14 @@ int main(void)
 			}
 		}
 		j++;
-		count = fprintf(fp, "Y %d", pid);
+		fwrite(buf, sizeof(char), l, fp);
+		fflush(fp);
+		//count = fprintf(fp, "Y %d", pid);
 	}
 	// End of real time scheduling loop
 
-	printf("Math done. Press enter key to exit...");
-	getchar();
+	//printf("Math done. Press enter key to exit...");
+	//getchar();
 
 cleanup:
 	if(registered)

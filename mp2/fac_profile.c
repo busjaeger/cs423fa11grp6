@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 
-#define LOOPS 1000
+#define LOOPS 10
 #define RUNS_PER_LOOP 50000
 #define VAL_TO_FAC 20LLU
 
