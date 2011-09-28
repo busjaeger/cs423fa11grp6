@@ -35,7 +35,6 @@ int main(void)
 	bool registered = false;
 	int pid = (int)getpid();
 	int ret = EXIT_SUCCESS;
-	char buf[20];
 	
 	signal(SIGINT, signal_callback_handler);
  
