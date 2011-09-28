@@ -29,7 +29,7 @@ int main(void)
 {
 	FILE *fp;
 	size_t count;
-	int i, j = 0, l, in_pid;
+	int i, j = 0, in_pid;
 	unsigned int in_period, in_runtime;
 	bool bFound = false;
 	bool registered = false;
@@ -66,12 +66,8 @@ int main(void)
 	registered = true;
 	printf("Registered successfully. PID is %d\n", pid);
 
-	buf[0] = 'Y';
-	buf[1] = ' ';
-	l = sprintf(&(buf[2]), "%d", pid) + 3;
 	// Tell scheduler we are ready
-	//count = fprintf(fp, "Y %d", pid);
-	fwrite(buf, sizeof(char), l, fp);
+	count = fprintf(fp, "Y %d", pid);
 	fflush(fp);
 
 	printf("Doing math. Press CTRL+C to stop...\n");
@@ -85,9 +81,8 @@ int main(void)
 			}
 		}
 		j++;
-		fwrite(buf, sizeof(char), l, fp);
+		count = fprintf(fp, "Y %d", pid);
 		fflush(fp);
-		//count = fprintf(fp, "Y %d", pid);
 	}
 	// End of real time scheduling loop
 
