@@ -4,13 +4,16 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <sys/time.h>
+#include <time.h>
 
 #define PERIOD	100
-#define RUNTIME	15
+#define RUNTIME	10
 
-#define LOOPS 20
-#define RUNS_PER_LOOP 50000
+#define LOOPS 600
+#define RUNS_PER_LOOP 1
 #define VAL_TO_FAC 20LLU
+#define TIME_STRING_LENGTH 255
  
 unsigned long long fac(unsigned long long in);
 bool bContinue = true;
@@ -32,9 +35,11 @@ int main(void)
 	int i, j = 0, in_pid;
 	unsigned int in_period, in_runtime;
 	bool bFound = false;
-	bool registered = false;
 	int pid = (int)getpid();
 	int ret = EXIT_SUCCESS;
+	struct timeval tval;
+	char strtime[TIME_STRING_LENGTH];
+	time_t second;
 	
 	signal(SIGINT, signal_callback_handler);
  
@@ -62,7 +67,6 @@ int main(void)
 		goto cleanup;
 	}
 	rewind(fp);
-	registered = true;
 	printf("Registered successfully. PID is %d\n", pid);
 
 	// Tell scheduler we are ready
@@ -73,6 +77,10 @@ int main(void)
 
 	// Start of real time loop
 	while(bContinue && j<LOOPS) {
+		gettimeofday(&tval, NULL);
+		second = tval.tv_sec;
+		strftime(strtime, TIME_STRING_LENGTH, "%D %T", localtime(&second));
+		printf("Process %d woke at: %s.%06ld\n", pid, strtime, tval.tv_usec);
 		for(i=0; i<RUNS_PER_LOOP; i++) {
 			fac(VAL_TO_FAC);
 			if(!bContinue) {
@@ -83,13 +91,11 @@ int main(void)
 		count = fprintf(fp, "Y %d", pid);
 		fflush(fp);
 	}
+	
 	// End of real time scheduling loop
 
-	//printf("Math done. Press enter key to exit...");
-	//getchar();
-
 cleanup:
-	if(registered)
+	if(bFound)
 		count = fprintf(fp, "D %d", pid);
 	if(fp!=NULL)
 		fclose(fp);
