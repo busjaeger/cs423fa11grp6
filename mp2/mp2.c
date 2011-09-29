@@ -42,20 +42,11 @@ static int should_stop;
 // global current task
 static struct mrs_task_struct *current_mrs;
 
-
 // find task from task list
 static struct mrs_task_struct * _find_mrs_task(pid_t pid)
 {
-	printk(KERN_INFO "mrs: find_mrs_task: pid passed in: %d\n", pid);	
 	struct mrs_task_struct *mrs_task;
-	struct task_struct *temp = NULL;
-	temp = find_task_by_pid(pid);
-	if (temp) {
-		printk(KERN_INFO "mrs: find_task_by_pid: %d\n", temp->pid);
-	}
 	list_for_each_entry(mrs_task, &mrs_tasks, list) {
-		printk(KERN_INFO "mrs: find_mrs_task: contains %d\n", mrs_task->task->pid);
-		printk(KERN_INFO "mrs: find_mrs_task: tgid: %d\n", mrs_task->task->tgid);
 		if (mrs_task->task->pid == pid)
 			return mrs_task;
 	}
@@ -110,14 +101,12 @@ static void _mrs_schedule(void)
 	struct mrs_task_struct *next;
 	// current task was put to sleep, so reset priority and unset current
 	if (current_mrs && current_mrs->state == SLEEPING) {
-		printk(KERN_INFO "mrs: mrs_schedule: current exists, state set SLEEPING %d\n", current_mrs->task->pid);
-		_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);		
+		_mrs_sched_setscheduler(current_mrs->task, SCHED_NORMAL, 0);
 		current_mrs = NULL;
 	}
 	// if another task with higher priority is ready, switch to it
 	next = _find_next_mrs_task();
 	if (next && (!current_mrs || current_mrs->period > next->period)) {
-		printk(KERN_INFO "mrs: mrs_schedule: found higher priority, current null\n");
 		// preempt current task if present
 		if (current_mrs) {
 			current_mrs->state = READY;
@@ -128,8 +117,6 @@ static void _mrs_schedule(void)
 		}
 		next->state = RUNNING;
 		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_PRIO);
-		printk(KERN_INFO "mrs: mrs_schedule: waking up %d\n", next->task->pid);
-		//sleeping = next->task;
 		wake_up_process(next->task);
 		current_mrs = next;
 	}
@@ -164,7 +151,6 @@ void period_timeout(unsigned long data)
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task = _find_mrs_task(pid);
         if (!mrs_task) {
-		printk(KERN_INFO "mrs: period_timeout: didnt find task pid %d.\n", pid);
 		err = -ESRCH;
                 goto error;
 	}
@@ -174,15 +160,6 @@ void period_timeout(unsigned long data)
 		printk(KERN_INFO "mrs: period_timeout: case SLEEPING %d.\n", pid);
 		mrs_task->state = READY;
 		up(&mrs_sem);
-		break;
-	case RUNNING:
-		printk(KERN_INFO "mrs: period_timeout: case RUNNING %d.\n", pid);
-		break;
-	case NEW:
-		printk(KERN_INFO "mrs: period_timeout: case NEW %d.\n", pid);
-		break;
-	case READY:
-		printk(KERN_INFO "mrs: period_timeout: case READY %d.\n", pid);
 		break;
 	default:
 		err = -EPERM;
@@ -219,7 +196,6 @@ static int _mrs_admission_control(unsigned int period, unsigned int runtime)
 {
 	struct mrs_task_struct *pos;
 	unsigned int sum_ratio = (1000 * runtime) / period;
-	printk(KERN_INFO "mrs: admission control: sum_ratio: %d.\n", sum_ratio);
 	list_for_each_entry(pos, &mrs_tasks, list)
 		sum_ratio += (1000 * pos->runtime) / pos->period;
 	return sum_ratio > MRS_THRESHOLD;
@@ -249,12 +225,10 @@ static int register_mrs_task(pid_t pid, unsigned int period,
 	// critical section: add task if admitted and not alrady present
 	spin_lock_irqsave(&mrs_lock, flags);
 	if (_mrs_admission_control(period, runtime)) {
-		printk(KERN_ALERT "mrs: task failed admission control %d.\n", pid);
 		err = -EBUSY;
 		goto error;
 	}
 	if (_find_mrs_task(pid)) {
-		printk(KERN_ALERT "mrs: did not find task with pid %d in task list.\n", pid);
 		err = -EEXIST;
 		goto error;
 	}
@@ -340,31 +314,24 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 		return -EFAULT;
 	switch (*buf) {
 	case 'R':
-		if (sscanf(buf, "R %d %u %u", &pid, &period, &runtime) != 3) {
-			printk(KERN_INFO "mrs: failed registering scanf pid %d.\n", pid);
+		if (sscanf(buf, "R %d %u %u", &pid, &period, &runtime) != 3)
 			ret = -EINVAL;
-		} else {
+		else
 			ret = register_mrs_task(pid, period, runtime);
-		}
 		break;
 	case 'Y':
-		if (sscanf(buf, "Y %d", &pid) != 1) {
+		if (sscanf(buf, "Y %d", &pid) != 1)
 			ret = -EINVAL;
-		} else {
+		else
 			ret = yield_msr_task(pid);
-		}
-		printk(KERN_INFO "mrs: write_proc: Yield pid: %d\n", pid);
 		break;
 	case 'D':
-		if (sscanf(buf, "D %d", &pid) != 1) {
+		if (sscanf(buf, "D %d", &pid) != 1)
 			ret = -EINVAL;
-		} else {
+		else
 			ret = deregister_mrs_task(pid);
-		}
-		printk(KERN_INFO "mrs: write_proc: Deregistration pid: %d\n", pid);
 		break;
 	default:
-		printk(KERN_INFO "mrs: write_proc: Invalid string pid: %d\n", pid);
 		ret = -EINVAL;
 		break;
 	}
@@ -388,8 +355,6 @@ int mrs_read_proc(char *page, char **start, off_t off,
 	list_for_each_entry(mrs_task, &mrs_tasks, list)	{
 		// Output: PID Period ProccessingTime
 		ptr += sprintf( ptr, "%d %u %u\n", mrs_task->task->pid,
-					mrs_task->period, mrs_task->runtime);
-		printk(KERN_ALERT "mrs: reading proc file: %d %u %u.\n", mrs_task->task->pid,
 					mrs_task->period, mrs_task->runtime);
 	}
 	spin_unlock_irqrestore(&mrs_lock, flags);

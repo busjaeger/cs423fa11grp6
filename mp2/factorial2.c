@@ -41,7 +41,7 @@ int main(void)
 	
 	signal(SIGINT, signal_callback_handler);
  
-	fp = fopen("/proc/mp2/status", "w");
+	fp = fopen("/proc/mp2/status", "r+");
 	if(fp == NULL) {
 		perror("Failed to open proc file!\n");
 		ret = EXIT_FAILURE;
@@ -49,19 +49,10 @@ int main(void)
 	}
 
 	//Register app
-	printf("Factorial: Registering app with: R %d %u %u\n", pid, PERIOD, RUNTIME); // DEBUG
 	count = fprintf(fp, "R %d %u %u", pid, PERIOD, RUNTIME);
-	fclose(fp);
-
-	fp = fopen("/proc/mp2/status", "r");
-	if(fp == NULL) {
-		perror("Failed to open proc file!\n");
-		ret = EXIT_FAILURE;
-		goto cleanup;
-	}
 
 	// Check if we registered successfully
-	while(fscanf(fp, "%d %u %u", &in_pid, &in_period, &in_runtime)!= EOF) {
+	while(fscanf(fp, "%d %u %u", &in_pid, &in_period, &in_runtime)!=EOF) {
 		if(in_pid == pid) {
 			printf("Factorial: Found pid %d after reading proc file, success\n", pid);
 			bFound = true;
@@ -76,7 +67,7 @@ int main(void)
 	fclose(fp);
 
 	registered = true;
-	printf("Factorial: Registered successfully. PID is %d\n", pid);
+	printf("Registered successfully. PID is %d\n", count, pid);
 
 	// Tell scheduler we are ready
 	fp = fopen("/proc/mp2/status", "w");
@@ -88,17 +79,8 @@ int main(void)
 
 	printf("Factorial: Initial yield, Y %d\n", pid);
 	count = fprintf(fp, "Y %d", pid);
-	fclose(fp);
-
-	
-
-	fp = fopen("/proc/mp2/status", "w");
-	if(fp == NULL) {
-		perror("Failed to open proc file!\n");
-		ret = EXIT_FAILURE;
-		goto cleanup;
-	}
 	printf("Doing math. Press CTRL+C to stop...\n");
+
 	// Start of real time loop
 	while(bContinue && j<LOOPS) {
 		for(i=0; i<RUNS_PER_LOOP; i++) {
