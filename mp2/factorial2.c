@@ -67,7 +67,10 @@ int main(void)
 		goto cleanup;
 	}
 	rewind(fp);
-	printf("Registered successfully. PID is %d\n", pid);
+	gettimeofday(&tval, NULL);
+	second = tval.tv_sec;
+	strftime(strtime, TIME_STRING_LENGTH, "%D %T", localtime(&second));
+	printf("Registered successfully at: %s.%06ld. PID is %d\n", strtime, tval.tv_usec, pid);
 
 	// Tell scheduler we are ready
 	count = fprintf(fp, "Y %d", pid);

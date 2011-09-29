@@ -126,16 +126,19 @@ static void _mrs_schedule(void)
 static int dispatch(void *data)
 {
 	unsigned long flags;
+	int stop = 0;
+	
 	printk(KERN_INFO "mrs: dispatcher entry.\n");
-	while(1) {
+	while(!stop) {
 		printk(KERN_INFO "mrs: dispatcher waiting.\n");
 		if (down_interruptible(&mrs_sem) == -EINTR)
 			break;
 		printk(KERN_INFO "mrs: dispatcher awake.\n");
 		spin_lock_irqsave(&mrs_lock, flags);
 		if (should_stop)
-			break;
-		_mrs_schedule();
+			stop = 1;
+		else
+			_mrs_schedule();
 		spin_unlock_irqrestore(&mrs_lock, flags);
 	}
 	printk(KERN_INFO "mrs: dispatcher exit.\n");
