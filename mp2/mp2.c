@@ -133,8 +133,10 @@ static int dispatch(void *data)
 			break;
 		printk(KERN_INFO "mrs: dispatcher awake.\n");
 		spin_lock_irqsave(&mrs_lock, flags);
-		if (should_stop)
+		if (should_stop) {
+			spin_unlock_irqrestore(&mrs_lock, flags);
 			break;
+		}
 		_mrs_schedule();
 		spin_unlock_irqrestore(&mrs_lock, flags);
 	}
