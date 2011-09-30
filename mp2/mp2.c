@@ -13,6 +13,7 @@
 #define THREAD_NAME "mrs-dispatcher"
 #define MAX_PERIOD 0xffffffff
 #define MRS_PRIO MAX_USER_RT_PRIO - 1
+#define MRS_TSK_PRIO MRS_PRIO - 1
 #define MRS_THRESHOLD 693
 
 enum mrs_state {NEW, SLEEPING, READY, RUNNING };
@@ -116,7 +117,7 @@ static void _mrs_schedule(void)
 			set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
 		}
 		next->state = RUNNING;
-		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_PRIO);
+		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_TSK_PRIO);
 		wake_up_process(next->task);
 		current_mrs = next;
 	}
@@ -399,7 +400,7 @@ static int _mrs_init(void)
 		goto error_rm;
         }
 	should_stop = 0;
-	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
+	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MRS_PRIO);
 	wake_up_process(dispatcher_thread);
         return 0;
 error_rm:
