@@ -61,6 +61,7 @@ static struct mrs_task_struct *_remove_mrs_task(pid_t pid)
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
 		if (mrs_task->task->pid == pid) {
+			del_timer_sync(&mrs_task->period_timer);
                         list_del(ptr);
 			return mrs_task;
                 }
@@ -298,10 +299,8 @@ static int deregister_mrs_task(pid_t pid)
 	if (mrs_task == current_mrs)
 		current_mrs = NULL;
 	spin_unlock_irqrestore(&mrs_lock, flags);
-	if (mrs_task) {
-		del_timer(&mrs_task->period_timer);
+	if (mrs_task)
 		kfree(mrs_task);
-	}
 	printk(KERN_INFO "mrs: %d deregistering exit.\n", pid);
 	return 0;
 }
@@ -345,7 +344,8 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 	}
 	kfree(buf);
 	if (ret < 0)
-		printk(KERN_ERR "mrs: proc write failed with error %d.\n", ret);
+		printk(KERN_ERR "mrs: %d proc write failed with error %d.\n",
+				current->pid, ret);
 	else
 		ret = count;
 	return ret;
@@ -427,8 +427,8 @@ static void mrs_exit(void)
 	// free stats list
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
+		del_timer_sync(&task->period_timer);
 		list_del(ptr);
-		del_timer(&task->period_timer);
 		kfree(task);
 	}
 	current_mrs = NULL;
