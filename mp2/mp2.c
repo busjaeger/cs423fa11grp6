@@ -295,9 +295,10 @@ static int deregister_mrs_task(pid_t pid)
 	printk(KERN_INFO "mrs: %d deregistering entry.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task =_remove_mrs_task(pid);
-	// TODO do we need to let the dispatcher know?
+	// note: we are letting the current task finish with rt prio
 	if (mrs_task == current_mrs)
 		current_mrs = NULL;
+	up(&mrs_sem);
 	spin_unlock_irqrestore(&mrs_lock, flags);
 	if (mrs_task)
 		kfree(mrs_task);
