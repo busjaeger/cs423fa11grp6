@@ -13,6 +13,7 @@
 #define THREAD_NAME "mrs-dispatcher"
 #define MAX_PERIOD 0xffffffff
 #define MRS_PRIO MAX_USER_RT_PRIO - 1
+#define MRS_TSK_PRIO MRS_PRIO - 1
 #define MRS_THRESHOLD 693
 
 enum mrs_state {NEW, SLEEPING, READY, RUNNING };
@@ -60,6 +61,7 @@ static struct mrs_task_struct *_remove_mrs_task(pid_t pid)
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		mrs_task = list_entry(ptr, struct mrs_task_struct, list);
 		if (mrs_task->task->pid == pid) {
+			del_timer_sync(&mrs_task->period_timer);
                         list_del(ptr);
 			return mrs_task;
                 }
@@ -116,7 +118,7 @@ static void _mrs_schedule(void)
 			set_task_state(current_mrs, TASK_UNINTERRUPTIBLE);
 		}
 		next->state = RUNNING;
-		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_PRIO);
+		_mrs_sched_setscheduler(next->task, SCHED_FIFO, MRS_TSK_PRIO);
 		wake_up_process(next->task);
 		current_mrs = next;
 	}
@@ -126,19 +128,19 @@ static void _mrs_schedule(void)
 static int dispatch(void *data)
 {
 	unsigned long flags;
-	int stop = 0;
 	
 	printk(KERN_INFO "mrs: dispatcher entry.\n");
-	while(!stop) {
+	while(1) {
 		printk(KERN_INFO "mrs: dispatcher waiting.\n");
 		if (down_interruptible(&mrs_sem) == -EINTR)
 			break;
 		printk(KERN_INFO "mrs: dispatcher awake.\n");
 		spin_lock_irqsave(&mrs_lock, flags);
-		if (should_stop)
-			stop = 1;
-		else
-			_mrs_schedule();
+		if (should_stop) {
+			spin_unlock_irqrestore(&mrs_lock, flags);
+			break;
+		}
+		_mrs_schedule();
 		spin_unlock_irqrestore(&mrs_lock, flags);
 	}
 	printk(KERN_INFO "mrs: dispatcher exit.\n");
@@ -293,14 +295,13 @@ static int deregister_mrs_task(pid_t pid)
 	printk(KERN_INFO "mrs: %d deregistering entry.\n", pid);
 	spin_lock_irqsave(&mrs_lock, flags);
 	mrs_task =_remove_mrs_task(pid);
-	// TODO do we need to let the dispatcher know?
+	// note: we are letting the current task finish with rt prio
 	if (mrs_task == current_mrs)
 		current_mrs = NULL;
+	up(&mrs_sem);
 	spin_unlock_irqrestore(&mrs_lock, flags);
-	if (mrs_task) {
-		del_timer(&mrs_task->period_timer);
+	if (mrs_task)
 		kfree(mrs_task);
-	}
 	printk(KERN_INFO "mrs: %d deregistering exit.\n", pid);
 	return 0;
 }
@@ -344,7 +345,8 @@ int mrs_write_proc(struct file *file, const char __user *user_buf,
 	}
 	kfree(buf);
 	if (ret < 0)
-		printk(KERN_ERR "mrs: proc write failed with error %d.\n", ret);
+		printk(KERN_ERR "mrs: %d proc write failed with error %d.\n",
+				current->pid, ret);
 	else
 		ret = count;
 	return ret;
@@ -399,7 +401,7 @@ static int _mrs_init(void)
 		goto error_rm;
         }
 	should_stop = 0;
-	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MAX_USER_RT_PRIO);
+	_mrs_sched_setscheduler(dispatcher_thread, SCHED_FIFO, MRS_PRIO);
 	wake_up_process(dispatcher_thread);
         return 0;
 error_rm:
@@ -426,8 +428,8 @@ static void mrs_exit(void)
 	// free stats list
 	list_for_each_safe(ptr, tmp, &mrs_tasks) {
 		task = list_entry(ptr, struct mrs_task_struct, list);
+		del_timer_sync(&task->period_timer);
 		list_del(ptr);
-		del_timer(&task->period_timer);
 		kfree(task);
 	}
 	current_mrs = NULL;
