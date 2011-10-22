@@ -7,11 +7,11 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define PERIOD	100
+#define PERIOD	40
 #define RUNTIME	10
 
-#define LOOPS 600
-#define RUNS_PER_LOOP 1
+#define LOOPS 25
+#define RUNS_PER_LOOP 143000
 #define VAL_TO_FAC 20LLU
 #define TIME_STRING_LENGTH 255
  
@@ -39,6 +39,9 @@ int main(void)
 	int ret = EXIT_SUCCESS;
 	struct timeval tval;
 	char strtime[TIME_STRING_LENGTH];
+	time_t second;
+	struct timeval tval_actual_runtime;
+	time_t second_actual_runtime;
 	
 	signal(SIGINT, signal_callback_handler);
  
@@ -56,7 +59,6 @@ int main(void)
 	// Check if we registered successfully
 	while(fscanf(fp, "%d %u %u", &in_pid, &in_period, &in_runtime)!=EOF) {
 		if(in_pid == pid) {
-			printf("Factorial: Found pid %d after reading proc file, success\n", pid);
 			bFound = true;
 			break;
 		}
@@ -76,10 +78,9 @@ int main(void)
 	count = fprintf(fp, "Y %d", pid);
 	fflush(fp);
 
-	printf("Factorial: Initial yield, Y %d\n", pid);
-	count = fprintf(fp, "Y %d", pid);
 	printf("Doing math. Press CTRL+C to stop...\n");
 
+	
 	// Start of real time loop
 	while(bContinue && j<LOOPS) {
 		gettimeofday(&tval, NULL);
@@ -93,6 +94,10 @@ int main(void)
 			}
 		}
 		j++;
+		gettimeofday(&tval_actual_runtime, NULL);
+		second_actual_runtime = tval_actual_runtime.tv_sec;
+		strftime(strtime, TIME_STRING_LENGTH, "%D %T", localtime(&second_actual_runtime));
+		printf("Took %06ld\n", (tval_actual_runtime.tv_usec - tval.tv_usec));
 		count = fprintf(fp, "Y %d", pid);
 		fflush(fp);
 	}
