@@ -14,6 +14,7 @@
 
 #define DIR_NAME "mp3"
 #define FILE_NAME "status"
+#define WORKER_FREQ 20
 
 struct pkm_task_struct
 {
@@ -24,21 +25,78 @@ struct pkm_task_struct
 	unsigned long cpu_time;
 };
 
-struct pkm_wrkq_struct
-{
-	struct work_struct my_work;
-};
+typedef struct {
+	struct delayed_work my_work;
+} pkm_wrkq_struct;
 
-// mutex
+// task list mutex
 static DEFINE_MUTEX(pkm_mutex);
 // workqueue
-static struct workqueue_struct *pkm_wrkq;  // TODO: this correct?
+static struct workqueue_struct *pkm_wrkq;
 // proc directory stats file
 static struct proc_dir_entry *proc_file;
 // task list
 static LIST_HEAD(pkm_tasks);
+// work item pointer
+struct delayed_work *work_item;
 
 
+// updates jiffies, cpu utilization, and major and minor fault data
+// params: none
+// returns: bool - true if succeeded, false if failed
+bool update_buffer(void)
+{
+	unsigned long jiffs;
+	unsigned long minor=0;
+	unsigned long major=0;
+	unsigned long cpu=0;
+
+	unsigned long min;
+	unsigned long maj;
+	unsigned long cpu_use;
+
+	struct pkm_task_struct *pkm_task;
+	
+	#ifdef DEBUG
+	printk(KERN_INFO "pkm: Entered update_buffer\n");
+	#endif
+	
+	if (list_empty(&pkm_tasks)) {
+		return false;
+	}
+	
+	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
+		if(get_cpu_use(pkm_task->task->pid, &min, &maj, &cpu_use)!=-1) {
+			pkm_task->major_faults += maj;
+			pkm_task->minor_faults += min;
+			pkm_task->cpu_time += cpu_use;
+			
+			major+=maj;
+			minor+=min;
+			cpu+=cpu_use;
+		}
+	}
+	
+	jiffs = jiffies;
+	//TODO: write to buffer
+	
+	return true;
+}
+
+// Work queue worker function
+// params: delayed_work *work - queued work item pointer
+// returns: void
+void monitor_worker(struct delayed_work *work)
+{
+	#ifdef DEBUG
+	printk(KERN_INFO "pkm: Entered pkm_wrkq worker\n");
+	#endif
+	
+	if(update_buffer())
+		schedule_delayed_work(work, (long)(HZ/WORKER_FREQ));
+	else
+		kfree(work);
+}
 
 // find task from task list
 static struct pkm_task_struct *_find_pkm_task(pid_t pid)
@@ -65,14 +123,12 @@ static struct pkm_task_struct *_remove_pkm_task(pid_t pid)
 	return NULL;
 }
 
-
-
 // allocate and initialize a task
 // returns NULL if get_cpu_use fails to get values
 struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 {
 	int ret;
-	int major, minor, cpu_time;
+	unsigned long major, minor, cpu_time;
 	struct pkm_task_struct *pkm_task = NULL;
 	ret = get_cpu_use(pid, &minor, &major, &cpu_time);
 	if (ret == 0) {
@@ -89,23 +145,13 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 }
 
 
-// Code from mp2
-struct task_struct* find_task_by_pid(unsigned int nr)
-{
-    struct task_struct* task;
-    rcu_read_lock();
-    task = pid_task(find_vpid(nr), PIDTYPE_PID);
-    rcu_read_unlock();
-
-    return task;
-}
-
 // Add process to PCB list and create a work queue job if the PCB list is empty
 static int register_pkm_task(pid_t pid)
 {
 	struct task_struct *task;
 	struct pkm_task_struct *pkm_task;
 	int err = -1;
+	bool listwasempty = false;
 	
 	task = find_task_by_pid(pid);
 	if (!task || task != current)
@@ -116,13 +162,29 @@ static int register_pkm_task(pid_t pid)
 		return -ENOMEM;
 	// critical section: add task if not already present
 	mutex_lock(&pkm_mutex);
-	if (_find_pkm_task(pid) == NULL) {
+	if (_find_pkm_task(pid)) {
 		err = -EEXIST;
 		goto error;
 	}
+	if (list_empty(&pkm_tasks)) {
+		listwasempty = true;
+	}
 	list_add_tail(&pkm_task->list, &pkm_tasks);
 	mutex_unlock(&pkm_mutex);
-	// TODO: Create work queue job if PCB list is empty, here or earlier?
+	
+	//Create work queue job if PCB list was empty
+	//pkm_wrkq_struct *work_item;
+	if(listwasempty) {
+		work_item = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
+		if (work_item) 
+		{
+			INIT_DELAYED_WORK((struct delayed_work *)work_item, monitor_worker);
+			schedule_delayed_work((struct delayed_work *)work_item, 0);
+		}
+		else
+			return -ENOMEM;
+	}
+	
 	return 0;
 error:
 	mutex_unlock(&pkm_mutex);
@@ -133,17 +195,28 @@ error:
 // Remove a task from the list and free it
 static int deregister_pkm_task(pid_t pid)
 {
+	bool listempty = false;
 	struct pkm_task_struct *pkm_task;
 	printk(KERN_INFO "pkm: %d deregistering entry.\n", pid);
 	mutex_lock(&pkm_mutex);
 	pkm_task =_remove_pkm_task(pid);
 	if (pkm_task == NULL) {
 		//printk(KERN_INFO "pkm: Deregister %d could not be found!\n", pid);
-		//TODO: call function to delete workqueue
+	}
+	if (list_empty(&pkm_tasks)) {
+		listempty = true;
 	}
 	mutex_unlock(&pkm_mutex);
 	if (pkm_task)
 		kfree(pkm_task);
+	if(listempty) {
+		// delete workqueue jobs
+		if(work_item) {
+			if(cancel_delayed_work(work_item)==0)
+				flush_workqueue(pkm_wrkq);
+			kfree(work_item);
+		}
+	}
 	printk(KERN_INFO "pkm: %d deregistering exit.\n", pid);
 	return 0;
 }
@@ -225,8 +298,15 @@ static int _pkm_init(void)
 	proc_file->read_proc = pkm_read_proc;
 	proc_file->write_proc = pkm_write_proc;
 
-	//TODO: Create workqueue
+	// Create workqueue
+	pkm_wrkq = create_workqueue("pkm_wrkq");
+	if(!pkm_wrkq) {
+		err = -ENOMEM;
+		goto error_rm;
+	}
+		
 	return 0;
+	
 error_rm:
 	remove_proc_entry(FILE_NAME, proc_dir);
 error_rmd:
@@ -247,6 +327,17 @@ static void pkm_exit(void)
 		remove_proc_entry(FILE_NAME, proc_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
 	}
+	
+	// clean up work queue
+	if(work_item)
+		cancel_delayed_work(work_item);
+	if(pkm_wrkq) {
+		flush_workqueue(pkm_wrkq);
+		destroy_workqueue(pkm_wrkq);
+	}
+	if(work_item)
+		kfree(work_item);
+	
 	mutex_lock(&pkm_mutex);
 	// free stats list
 	list_for_each_safe(ptr, tmp, &pkm_tasks) {

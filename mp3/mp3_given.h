@@ -16,6 +16,12 @@ int get_cpu_use(int pid, unsigned long *min, unsigned long *maj, unsigned long *
 
    if (task!=NULL) {  
      *cpu_use=task->utime;
+	 *maj=task->maj_flt;
+	 *min=task->min_flt;
+	 
+	 task->utime = 0;
+	 task->maj_flt = 0;
+	 task->min_flt = 0;
 
      /* please extend this part to read the page fault counts
         and to reset the all three read values in PCB */
