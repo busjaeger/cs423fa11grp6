@@ -16,8 +16,7 @@
 #define FILE_NAME "status"
 #define WORKER_FREQ 20
 
-struct pkm_task_struct
-{
+struct pkm_task_struct {
 	struct task_struct* task;
 	struct list_head list;
 	unsigned long major_faults;
@@ -86,14 +85,14 @@ bool update_buffer(void)
 // Work queue worker function
 // params: delayed_work *work - queued work item pointer
 // returns: void
-void monitor_worker(struct delayed_work *work)
+void monitor_worker(struct work_struct *work)
 {
 	#ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered pkm_wrkq worker\n");
 	#endif
 	
 	if(update_buffer())
-		schedule_delayed_work(work, (long)(HZ/WORKER_FREQ));
+		schedule_delayed_work(work_item, (long)(HZ/WORKER_FREQ));
 	else
 		kfree(work);
 }
@@ -176,13 +175,13 @@ static int register_pkm_task(pid_t pid)
 	//pkm_wrkq_struct *work_item;
 	if(listwasempty) {
 		work_item = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
-		if (work_item) 
-		{
-			INIT_DELAYED_WORK((struct delayed_work *)work_item, monitor_worker);
-			schedule_delayed_work((struct delayed_work *)work_item, 0);
+		if (work_item) {
+			INIT_DELAYED_WORK(work_item, monitor_worker);
+			schedule_delayed_work(work_item, 0);
 		}
-		else
+		else {
 			return -ENOMEM;
+                }
 	}
 	
 	return 0;
@@ -297,14 +296,12 @@ static int _pkm_init(void)
 	// set proc functions
 	proc_file->read_proc = pkm_read_proc;
 	proc_file->write_proc = pkm_write_proc;
-
 	// Create workqueue
 	pkm_wrkq = create_workqueue("pkm_wrkq");
 	if(!pkm_wrkq) {
 		err = -ENOMEM;
 		goto error_rm;
 	}
-		
 	return 0;
 	
 error_rm:
