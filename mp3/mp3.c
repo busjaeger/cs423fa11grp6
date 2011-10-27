@@ -10,11 +10,17 @@
 #include <asm/uaccess.h>
 #include <linux/sched.h>		// PCB structure
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
+#include <linux/cdev.h>
+#include <linux/mm.h>
+#include <linux/page-flags.h>
 #include "mp3_given.h"
 
 #define DIR_NAME "mp3"
 #define FILE_NAME "status"
 #define WORKER_FREQ 20
+#define PKM_NAME "pkm"
+#define BUF_SIZE 131072 * sizeof(unsigned long)         // half MB for 4 bytes
 
 struct pkm_task_struct {
 	struct task_struct* task;
@@ -38,7 +44,19 @@ static struct proc_dir_entry *proc_file;
 static LIST_HEAD(pkm_tasks);
 // work item pointer
 struct delayed_work *work_item;
-
+// memory mapped profiling buffer
+static void *pkm_buffer;
+// pointers to current and last position in buffer
+static unsigned long *pkm_buffer_pos;
+static unsigned long *pkm_buffer_last;
+// device cdev struct
+static struct cdev pkmdev_cdev;
+// device file operations
+int pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
+static struct file_operations pkmdev_fops = {
+        .owner = THIS_MODULE,
+        .mmap = pkmdev_mmap,
+};
 
 // updates jiffies, cpu utilization, and major and minor fault data
 // params: none
@@ -55,15 +73,14 @@ bool update_buffer(void)
 	unsigned long cpu_use;
 
 	struct pkm_task_struct *pkm_task;
-	
+
 	#ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
 	#endif
-	
-	if (list_empty(&pkm_tasks)) {
+
+	if (list_empty(&pkm_tasks))
 		return false;
-	}
-	
+
 	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
 		if(get_cpu_use(pkm_task->task->pid, &min, &maj, &cpu_use)!=-1) {
 			pkm_task->major_faults += maj;
@@ -75,11 +92,18 @@ bool update_buffer(void)
 			cpu+=cpu_use;
 		}
 	}
-	
-	jiffs = jiffies;
-	//TODO: write to buffer
-	
-	return true;
+
+        jiffs = jiffies;
+        *pkm_buffer_pos++ = jiffs;
+        *pkm_buffer_pos++ = minor;
+        *pkm_buffer_pos++ = major;
+        *pkm_buffer_pos = cpu;
+        // wrap around
+        if (pkm_buffer_pos == pkm_buffer_last)
+                pkm_buffer_pos = pkm_buffer;
+        else
+                pkm_buffer_pos++;
+        return true;
 }
 
 // Work queue worker function
@@ -143,6 +167,10 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 	return pkm_task;
 }
 
+int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
+{
+        return remap_vmalloc_range(vma, pkm_buffer, 0);
+}
 
 // Add process to PCB list and create a work queue job if the PCB list is empty
 static int register_pkm_task(pid_t pid)
@@ -174,7 +202,7 @@ static int register_pkm_task(pid_t pid)
 	//Create work queue job if PCB list was empty
 	//pkm_wrkq_struct *work_item;
 	if(listwasempty) {
-		work_item = (struct delayed_work *)kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
+		work_item = kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
 		if (work_item) {
 			INIT_DELAYED_WORK(work_item, monitor_worker);
 			schedule_delayed_work(work_item, 0);
@@ -281,7 +309,8 @@ int pkm_read_proc(char *page, char **start, off_t off,
 static int _pkm_init(void)
 {
 	struct proc_dir_entry *proc_dir;
-	int err;
+	int err, i;
+        dev_t dev;
 	// create proc directory and file
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!proc_dir) {
@@ -298,12 +327,32 @@ static int _pkm_init(void)
 	proc_file->write_proc = pkm_write_proc;
 	// Create workqueue
 	pkm_wrkq = create_workqueue("pkm_wrkq");
-	if(!pkm_wrkq) {
+	if (!pkm_wrkq) {
 		err = -ENOMEM;
 		goto error_rm;
 	}
+        // allocate buffer
+        pkm_buffer = vmalloc(BUF_SIZE);
+        if (!pkm_buffer) {
+                err = -ENOMEM;
+                goto error_dw;
+        }
+        for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
+                SetPageReserved(vmalloc_to_page(pkm_buffer+i));
+        pkm_buffer_pos = pkm_buffer;
+        pkm_buffer_last = pkm_buffer + (BUF_SIZE - sizeof(unsigned long));
+        // initialize and add device driver
+        if ((err = alloc_chrdev_region(&dev, 0, 1, PKM_NAME)))
+                goto error_dw;
+        cdev_init(&pkmdev_cdev, &pkmdev_fops);
+        if ((err = cdev_add(&pkmdev_cdev, dev, 1)))
+                goto error_udv;
 	return 0;
-	
+
+error_udv:
+        unregister_chrdev_region(dev, 1);
+error_dw:
+        destroy_workqueue(pkm_wrkq);
 error_rm:
 	remove_proc_entry(FILE_NAME, proc_dir);
 error_rmd:
@@ -318,6 +367,7 @@ static void pkm_exit(void)
 {
 	struct list_head *ptr, *tmp;
 	struct pkm_task_struct *task;
+        dev_t dev;
 
 	// remove proc directory and file
 	if (proc_file) {
@@ -326,15 +376,14 @@ static void pkm_exit(void)
 	}
 	
 	// clean up work queue
-	if(work_item)
+	if (work_item)
 		cancel_delayed_work(work_item);
-	if(pkm_wrkq) {
+	if (pkm_wrkq) {
 		flush_workqueue(pkm_wrkq);
 		destroy_workqueue(pkm_wrkq);
 	}
-	if(work_item)
+	if (work_item)
 		kfree(work_item);
-	
 	mutex_lock(&pkm_mutex);
 	// free stats list
 	list_for_each_safe(ptr, tmp, &pkm_tasks) {
@@ -343,6 +392,11 @@ static void pkm_exit(void)
 		kfree(task);
 	}
 	mutex_unlock(&pkm_mutex);
+        if (pkm_buffer)
+                vfree(pkm_buffer);
+        dev = pkmdev_cdev.dev;
+        cdev_del(&pkmdev_cdev);
+        unregister_chrdev_region(dev, 1);
 }
 
 module_init(_pkm_init);
