@@ -78,9 +78,11 @@ bool update_buffer(void)
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
 	#endif
 
-	if (list_empty(&pkm_tasks))
+	mutex_lock(&pkm_mutex);
+	if (list_empty(&pkm_tasks)) {
+                mutex_unlock(&pkm_mutex);
 		return false;
-
+        }
 	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
 		if(get_cpu_use(pkm_task->task->pid, &min, &maj, &cpu_use)!=-1) {
 			pkm_task->major_faults += maj;
@@ -92,6 +94,7 @@ bool update_buffer(void)
 			cpu+=cpu_use;
 		}
 	}
+        mutex_unlock(&pkm_mutex);
 
         jiffs = jiffies;
         *pkm_buffer_pos++ = jiffs;
@@ -114,7 +117,7 @@ void monitor_worker(struct work_struct *work)
 	#ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered pkm_wrkq worker\n");
 	#endif
-	
+
 	if(update_buffer())
 		schedule_delayed_work(work_item, (long)(HZ/WORKER_FREQ));
 	else
@@ -169,6 +172,7 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 
 int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
+        printk(KERN_INFO "pkm: Entered update_buffer\n");
         return remap_vmalloc_range(vma, pkm_buffer, 0);
 }
 
@@ -193,25 +197,19 @@ static int register_pkm_task(pid_t pid)
 		err = -EEXIST;
 		goto error;
 	}
-	if (list_empty(&pkm_tasks)) {
+	if (list_empty(&pkm_tasks))
 		listwasempty = true;
-	}
 	list_add_tail(&pkm_task->list, &pkm_tasks);
 	mutex_unlock(&pkm_mutex);
-	
 	//Create work queue job if PCB list was empty
 	//pkm_wrkq_struct *work_item;
 	if(listwasempty) {
 		work_item = kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
-		if (work_item) {
-			INIT_DELAYED_WORK(work_item, monitor_worker);
-			schedule_delayed_work(work_item, 0);
-		}
-		else {
-			return -ENOMEM;
-                }
+                if (!work_item) // TODO: remove task from list?
+                        return -ENOMEM;
+		INIT_DELAYED_WORK(work_item, monitor_worker);
+		schedule_delayed_work(work_item, 0);
 	}
-	
 	return 0;
 error:
 	mutex_unlock(&pkm_mutex);
@@ -230,7 +228,7 @@ static int deregister_pkm_task(pid_t pid)
 	if (pkm_task == NULL) {
 		//printk(KERN_INFO "pkm: Deregister %d could not be found!\n", pid);
 	}
-	if (list_empty(&pkm_tasks)) {
+        if (list_empty(&pkm_tasks)) {
 		listempty = true;
 	}
 	mutex_unlock(&pkm_mutex);
@@ -242,6 +240,7 @@ static int deregister_pkm_task(pid_t pid)
 			if(cancel_delayed_work(work_item)==0)
 				flush_workqueue(pkm_wrkq);
 			kfree(work_item);
+                        work_item = NULL;
 		}
 	}
 	printk(KERN_INFO "pkm: %d deregistering exit.\n", pid);
