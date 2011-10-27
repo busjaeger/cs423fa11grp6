@@ -185,7 +185,7 @@ static int register_pkm_task(pid_t pid)
 	bool listwasempty = false;
 	
 	task = find_task_by_pid(pid);
-	if (!task || task != current)
+	if (!task)
 		return -ESRCH;
 	// optimistically allocate task outside of critical region
 	pkm_task = _create_pkm_task(task, pid);
