@@ -22,5 +22,5 @@ monitor: monitor.c
 	$(GCC) -o monitor monitor.c
 
 clean:
-	$(RM) -f work monitor *~ *.ko *.o *.mod.c Module.symvers modules.order
+	$(RM) -rf work monitor *~ *.ko *.o *.mod.c Module.symvers modules.order .mp3* .tmp_versions
 

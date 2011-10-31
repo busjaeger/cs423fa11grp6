@@ -20,6 +20,7 @@
 #define FILE_NAME "status"
 #define WORKER_FREQ 20
 #define PKM_NAME "pkm"
+
 #define BUF_SIZE 131072 * sizeof(unsigned long)         // half MB for 4 bytes
 
 struct pkm_task_struct {
@@ -29,10 +30,6 @@ struct pkm_task_struct {
 	unsigned long minor_faults;
 	unsigned long cpu_time;
 };
-
-typedef struct {
-	struct delayed_work my_work;
-} pkm_wrkq_struct;
 
 // task list mutex
 static DEFINE_MUTEX(pkm_mutex);
@@ -52,11 +49,51 @@ static unsigned long *pkm_buffer_last;
 // device cdev struct
 static struct cdev pkmdev_cdev;
 // device file operations
-int pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
+static int pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
+static int pkmdev_open(struct inode *inode, struct file *f);
+static int pkmdev_release(struct inode *inode, struct file *f);
 static struct file_operations pkmdev_fops = {
         .owner = THIS_MODULE,
+        .open = pkmdev_open,
+        .release = pkmdev_release,
         .mmap = pkmdev_mmap,
 };
+
+// open method for character device
+static int pkmdev_open(struct inode *inode, struct file *f)
+{
+	return 0;
+}
+
+// close method for character device
+static int pkmdev_release(struct inode *inode, struct file *f)
+{
+	return 0;
+}
+
+// mmap function for character device
+static int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
+{
+        int ret;
+        unsigned long pfn, size;
+        unsigned long start = vma->vm_start;
+        unsigned long length = vma->vm_end - start;
+        void *ptr = pkm_buffer;
+
+        printk(KERN_INFO "pkm: mmap: start=%lu, length=%lu.\n", start, length);
+        if (vma->vm_pgoff > 0 || length > BUF_SIZE)
+                return -EIO;
+        while (length > 0) {
+                pfn = vmalloc_to_pfn(ptr);
+                size = length < PAGE_SIZE ? length : PAGE_SIZE;
+                if((ret=remap_pfn_range(vma, start, pfn, size, PAGE_SHARED))<0)
+                        return ret;
+                start += PAGE_SIZE;
+                ptr += PAGE_SIZE;
+                length -= PAGE_SIZE;
+        }
+	return 0;
+}
 
 // updates jiffies, cpu utilization, and major and minor fault data
 // params: none
@@ -74,9 +111,9 @@ bool update_buffer(void)
 
 	struct pkm_task_struct *pkm_task;
 
-	#ifdef DEBUG
+        #ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
-	#endif
+        #endif
 
 	mutex_lock(&pkm_mutex);
 	if (list_empty(&pkm_tasks)) {
@@ -114,9 +151,9 @@ bool update_buffer(void)
 // returns: void
 void monitor_worker(struct work_struct *work)
 {
-	#ifdef DEBUG
+        #ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered pkm_wrkq worker\n");
-	#endif
+        #endif
 
 	if(update_buffer())
 		schedule_delayed_work(work_item, (long)(HZ/WORKER_FREQ));
@@ -160,7 +197,7 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 	if (ret == 0) {
 		pkm_task = kmalloc(sizeof(*pkm_task), GFP_KERNEL);
 		if (pkm_task) {
-			pkm_task->task = task;		
+			pkm_task->task = task;
 			pkm_task->major_faults = major;
 			pkm_task->minor_faults = minor;
 			pkm_task->cpu_time = cpu_time;
@@ -170,12 +207,6 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 	return pkm_task;
 }
 
-int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
-{
-        printk(KERN_INFO "pkm: Entered update_buffer\n");
-        return remap_vmalloc_range(vma, pkm_buffer, 0);
-}
-
 // Add process to PCB list and create a work queue job if the PCB list is empty
 static int register_pkm_task(pid_t pid)
 {
@@ -183,7 +214,7 @@ static int register_pkm_task(pid_t pid)
 	struct pkm_task_struct *pkm_task;
 	int err = -1;
 	bool listwasempty = false;
-	
+
 	task = find_task_by_pid(pid);
 	if (!task)
 		return -ESRCH;
@@ -310,7 +341,12 @@ static int _pkm_init(void)
 	struct proc_dir_entry *proc_dir;
 	int err, i;
         dev_t dev;
-	// create proc directory and file
+
+        #ifdef DEBUG
+	printk(KERN_INFO "pkm: module starting.\n");
+        #endif
+
+	// create proc directory and file and set functions
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
 	if (!proc_dir) {
 		err = -ENOMEM;
@@ -321,16 +357,17 @@ static int _pkm_init(void)
 		err = -ENOMEM;
 		goto error_rmd;
 	}
-	// set proc functions
 	proc_file->read_proc = pkm_read_proc;
 	proc_file->write_proc = pkm_write_proc;
+
 	// Create workqueue
 	pkm_wrkq = create_workqueue("pkm_wrkq");
 	if (!pkm_wrkq) {
 		err = -ENOMEM;
 		goto error_rm;
 	}
-        // allocate buffer
+
+        // allocate buffer and initialize pages and positions
         pkm_buffer = vmalloc(BUF_SIZE);
         if (!pkm_buffer) {
                 err = -ENOMEM;
@@ -340,12 +377,17 @@ static int _pkm_init(void)
                 SetPageReserved(vmalloc_to_page(pkm_buffer+i));
         pkm_buffer_pos = pkm_buffer;
         pkm_buffer_last = pkm_buffer + (BUF_SIZE - sizeof(unsigned long));
+
         // initialize and add device driver
         if ((err = alloc_chrdev_region(&dev, 0, 1, PKM_NAME)))
                 goto error_dw;
         cdev_init(&pkmdev_cdev, &pkmdev_fops);
         if ((err = cdev_add(&pkmdev_cdev, dev, 1)))
                 goto error_udv;
+
+        #ifdef DEBUG
+	printk(KERN_INFO "pkm: module started.\n");
+        #endif
 	return 0;
 
 error_udv:
@@ -366,14 +408,19 @@ static void pkm_exit(void)
 {
 	struct list_head *ptr, *tmp;
 	struct pkm_task_struct *task;
+	int i;
         dev_t dev;
+
+        #ifdef DEBUG
+	printk(KERN_INFO "pkm: module stopping.\n");
+        #endif
 
 	// remove proc directory and file
 	if (proc_file) {
 		remove_proc_entry(FILE_NAME, proc_file->parent);
 		remove_proc_entry(DIR_NAME, NULL);
 	}
-	
+
 	// clean up work queue
 	if (work_item)
 		cancel_delayed_work(work_item);
@@ -383,19 +430,31 @@ static void pkm_exit(void)
 	}
 	if (work_item)
 		kfree(work_item);
+
+        // free task list
 	mutex_lock(&pkm_mutex);
-	// free stats list
 	list_for_each_safe(ptr, tmp, &pkm_tasks) {
 		task = list_entry(ptr, struct pkm_task_struct, list);
 		list_del(ptr);
 		kfree(task);
 	}
 	mutex_unlock(&pkm_mutex);
-        if (pkm_buffer)
+
+        // free profile buffer
+        if (pkm_buffer) {
+                for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
+                        ClearPageReserved(vmalloc_to_page(pkm_buffer+i));
                 vfree(pkm_buffer);
+        }
+
+        // unregister device driver
         dev = pkmdev_cdev.dev;
         cdev_del(&pkmdev_cdev);
         unregister_chrdev_region(dev, 1);
+
+        #ifdef DEBUG
+	printk(KERN_INFO "pkm: module stopped.\n");
+        #endif
 }
 
 module_init(_pkm_init);
