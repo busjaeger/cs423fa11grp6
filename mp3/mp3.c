@@ -156,7 +156,7 @@ void monitor_worker(struct work_struct *work)
         #endif
 
 	if(update_buffer())
-		schedule_delayed_work(work_item, (long)(HZ/WORKER_FREQ));
+		schedule_delayed_work(work_item, msecs_to_jiffies(50));
 	else
 		kfree(work);
 }
@@ -253,7 +253,7 @@ static int deregister_pkm_task(pid_t pid)
 {
 	bool listempty = false;
 	struct pkm_task_struct *pkm_task;
-	printk(KERN_INFO "pkm: %d deregistering entry.\n", pid);
+	printk(KERN_INFO "pkm: %d deregistering entry at %lu.\n", pid, jiffies);
 	mutex_lock(&pkm_mutex);
 	pkm_task =_remove_pkm_task(pid);
 	if (pkm_task == NULL) {
