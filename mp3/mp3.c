@@ -26,9 +26,10 @@
 struct pkm_task_struct {
 	struct task_struct* task;
 	struct list_head list;
-	unsigned long major_faults;
-	unsigned long minor_faults;
-	unsigned long cpu_time;
+	unsigned long maj_flt;
+	unsigned long min_flt;
+	unsigned long utime;
+        unsigned long stime;
 };
 
 // task list mutex
@@ -100,15 +101,8 @@ static int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
 // returns: bool - true if succeeded, false if failed
 bool update_buffer(void)
 {
-	unsigned long jiffs;
-	unsigned long minor=0;
-	unsigned long major=0;
-	unsigned long cpu=0;
-
-	unsigned long min;
-	unsigned long maj;
-	unsigned long cpu_use;
-
+	unsigned long total_min_flt=0, total_maj_flt=0, total_time=0;
+	unsigned long min_flt, maj_flt,utime, stime;
 	struct pkm_task_struct *pkm_task;
 
         #ifdef DEBUG
@@ -121,23 +115,24 @@ bool update_buffer(void)
 		return false;
         }
 	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
-		if(get_cpu_use(pkm_task->task->pid, &min, &maj, &cpu_use)!=-1) {
-			pkm_task->major_faults += maj;
-			pkm_task->minor_faults += min;
-			pkm_task->cpu_time += cpu_use;
-			
-			major+=maj;
-			minor+=min;
-			cpu+=cpu_use;
-		}
+		if(get_cpu_use(pkm_task->task->pid, &min_flt, &maj_flt,
+                                &utime, &stime)==-1)
+                        continue;
+                pkm_task->maj_flt += maj_flt;
+                pkm_task->min_flt += min_flt;
+                pkm_task->utime += utime;
+                pkm_task->stime += stime;
+
+                total_min_flt += min_flt;
+                total_maj_flt += maj_flt;
+                total_time += utime + stime;
 	}
         mutex_unlock(&pkm_mutex);
 
-        jiffs = jiffies;
-        *pkm_buffer_pos++ = jiffs;
-        *pkm_buffer_pos++ = minor;
-        *pkm_buffer_pos++ = major;
-        *pkm_buffer_pos = cpu;
+        *pkm_buffer_pos++ = jiffies;
+        *pkm_buffer_pos++ = total_min_flt;
+        *pkm_buffer_pos++ = total_maj_flt;
+        *pkm_buffer_pos = total_time;
         // wrap around
         if (pkm_buffer_pos == pkm_buffer_last)
                 pkm_buffer_pos = pkm_buffer;
@@ -191,16 +186,17 @@ static struct pkm_task_struct *_remove_pkm_task(pid_t pid)
 struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 {
 	int ret;
-	unsigned long major, minor, cpu_time;
+	unsigned long min_flt, maj_flt, utime, stime;
 	struct pkm_task_struct *pkm_task = NULL;
-	ret = get_cpu_use(pid, &minor, &major, &cpu_time);
+	ret = get_cpu_use(pid, &min_flt, &maj_flt, &utime, &stime);
 	if (ret == 0) {
 		pkm_task = kmalloc(sizeof(*pkm_task), GFP_KERNEL);
 		if (pkm_task) {
 			pkm_task->task = task;
-			pkm_task->major_faults = major;
-			pkm_task->minor_faults = minor;
-			pkm_task->cpu_time = cpu_time;
+			pkm_task->maj_flt = maj_flt;
+			pkm_task->min_flt = min_flt;
+			pkm_task->utime = utime;
+			pkm_task->stime = stime;
 			INIT_LIST_HEAD(&pkm_task->list);
 		}		
 	}

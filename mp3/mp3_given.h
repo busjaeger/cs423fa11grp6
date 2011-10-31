@@ -15,34 +15,30 @@ struct task_struct* find_task_by_pid(unsigned int nr)
     return task;
 }
 
-//THIS FUNCTION RETURNS 0 IF THE PID IS VALID AND THE CPU TIME AND MAJOR AND MINOR PAGE FAULT COUNTS ARE SUCCESFULLY RETURNED BY THE PARAMETER CPU_USE. OTHERWISE IT RETURNS -1
-int get_cpu_use(int pid, unsigned long *min, unsigned long *maj, unsigned long *cpu_use)
+// THIS FUNCTION RETURNS 0 IF THE PID IS VALID AND THE CPU TIME AND MAJOR AND 
+// MINOR PAGE FAULT COUNTS ARE SUCCESFULLY RETURNED BY THE PARAMETER CPU_USE.
+// OTHERWISE IT RETURNS -1
+int get_cpu_use(int pid, unsigned long *min_flt, unsigned long *maj_flt,
+         unsigned long *utime, unsigned long *stime)
 {
-   struct task_struct* task;
+        int ret = -1;
+        struct task_struct* task;
+        rcu_read_lock();
+        task=find_task_by_pid(pid);
+        if (task!=NULL) {
+                *min_flt=task->min_flt;
+                *maj_flt=task->maj_flt;
+                *utime=task->utime;
+                *stime=task->stime;
 
-   rcu_read_lock();
-
-   task=find_task_by_pid(pid);
-
-   if (task!=NULL) {  
-     *cpu_use=task->utime;
-	 *maj=task->maj_flt;
-	 *min=task->min_flt;
-	 
-	 task->utime = 0;
-	 task->maj_flt = 0;
-	 task->min_flt = 0;
-
-     /* please extend this part to read the page fault counts
-        and to reset the all three read values in PCB */
-
-     rcu_read_unlock();
-     return 0;
-   }
-   else {
-     rcu_read_unlock();
-     return -1;
-   }
+                task->maj_flt = 0;
+                task->min_flt = 0;
+                task->utime = 0;
+                task->stime = 0;
+                ret = 0;
+        }
+        rcu_read_unlock();
+        return ret;
 }
 
 #endif
