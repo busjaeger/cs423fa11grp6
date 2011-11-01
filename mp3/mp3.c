@@ -42,6 +42,8 @@ static struct proc_dir_entry *proc_file;
 static LIST_HEAD(pkm_tasks);
 // work item pointer
 struct delayed_work *work_item;
+//work item mutex
+static DEFINE_MUTEX(pkm_workitem_mutex);
 // memory mapped profiling buffer
 static void *pkm_buffer;
 // pointers to current and last position in buffer
@@ -229,13 +231,14 @@ static int register_pkm_task(pid_t pid)
 	list_add_tail(&pkm_task->list, &pkm_tasks);
 	mutex_unlock(&pkm_mutex);
 	//Create work queue job if PCB list was empty
-	//pkm_wrkq_struct *work_item;
 	if(listwasempty) {
-		work_item = kmalloc(sizeof(struct delayed_work), GFP_ATOMIC);
+		mutex_lock(&pkm_workitem_mutex);
+		work_item = kmalloc(sizeof(struct delayed_work), GFP_KERNEL);
                 if (!work_item) // TODO: remove task from list?
                         return -ENOMEM;
 		INIT_DELAYED_WORK(work_item, monitor_worker);
-		schedule_delayed_work(work_item, 0);
+		schedule_delayed_work(work_item, msecs_to_jiffies(50));
+		mutex_unlock(&pkm_workitem_mutex);
 	}
 	return 0;
 error:
@@ -263,12 +266,14 @@ static int deregister_pkm_task(pid_t pid)
 		kfree(pkm_task);
 	if(listempty) {
 		// delete workqueue jobs
+		mutex_lock(&pkm_workitem_mutex);
 		if(work_item) {
 			if(cancel_delayed_work(work_item)==0)
 				flush_workqueue(pkm_wrkq);
 			kfree(work_item);
                         work_item = NULL;
 		}
+		mutex_unlock(&pkm_workitem_mutex);
 	}
 	printk(KERN_INFO "pkm: %d deregistering exit.\n", pid);
 	return 0;
@@ -418,14 +423,21 @@ static void pkm_exit(void)
 	}
 
 	// clean up work queue
-	if (work_item)
+	mutex_lock(&pkm_workitem_mutex);
+	if (work_item) {	
+		mutex_unlock(&pkm_workitem_mutex);
 		cancel_delayed_work(work_item);
+	}
+	else
+		mutex_unlock(&pkm_workitem_mutex);
 	if (pkm_wrkq) {
 		flush_workqueue(pkm_wrkq);
 		destroy_workqueue(pkm_wrkq);
 	}
+	mutex_lock(&pkm_workitem_mutex);
 	if (work_item)
 		kfree(work_item);
+	mutex_unlock(&pkm_workitem_mutex);
 
         // free task list
 	mutex_lock(&pkm_mutex);
