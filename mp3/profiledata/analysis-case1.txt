@@ -1,0 +1,19 @@
+observation:
+neither run had any major page faults
+explanation:
+our VMs have close to 2GB of physical memory, with only about 600MB used at the time of the runs. Therefore, there is sufficient physical memory available to satisfy the accumulated virtual address space requirement of the two processes (1GB + a small text and stack) and the kernel does not need to swap out pages. In addition, the memory requests of the two processes do not need disk access to be satisfied; new heap pages can be added from physical memory. For example, no new code pages are accessed while running the process.
+
+observation:
+at the beginning the page fault rate is very high and then quickly jumps to a lower count
+explanation:
+linux uses demand paging. When the processes call malloc, their memory regions are expanded, but pages are not actually allocated. Only when an address within a specific page is requested, will the page be mapped. Once a page is mapped, it is not evicted unless necessary. At the very beginning of the run it is also necessary to allocate and map second-level page tables.
+
+observation:
+the totoal page fault count in the second run is lower (~25%) than that of the first run
+explanation:
+the second process of the second run mostly accesses pages close to the previous memory access. Only in 20% of the cases will it jump to some random address within its heap. Therefore, most memory accesses can be serviced without causing page faults.
+
+observation:
+the CPU utilization of the second run is lower (~25%) than that of the first run. (note: the absolute running time is almost the same, since the 20 second sleep time dominates the actual running time)
+explanation:
+the additional page faults cause freqent interruption of the current process to locate an available physical page frame and update the page tables.
