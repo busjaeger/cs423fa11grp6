@@ -140,6 +140,7 @@ bool update_buffer(void)
                 pkm_buffer_pos = pkm_buffer;
         else
                 pkm_buffer_pos++;
+        *pkm_buffer_pos = -1l; // mark end
         return true;
 }
 
