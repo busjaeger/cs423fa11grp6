@@ -1,0 +1,19 @@
+Case Study 2: Multiprogramming
+
+observation:
+total cpu utilization increases as N increases (fourth graph)
+
+
+
+observation:
+(completion time, figure this out by looking at how many profiled reads for each? N = 1, 402 reads; N = 5, 410 reads; N = 11 419 reads)
+
+
+
+observation:
+cpu utilization starts out high and then tapers; when N = 5 and N = 11, cpu utilization spikes at the end (why?)
+
+
+
+observation:
+no major page faults
