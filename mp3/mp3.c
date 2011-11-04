@@ -29,13 +29,11 @@ struct pkm_task_struct {
 	unsigned long maj_flt;
 	unsigned long min_flt;
 	unsigned long utime;
-        unsigned long stime;
+	unsigned long stime;
 };
 
 // task list mutex
 static DEFINE_MUTEX(pkm_mutex);
-// workqueue
-static struct workqueue_struct *pkm_wrkq;
 // proc directory stats file
 static struct proc_dir_entry *proc_file;
 // task list
@@ -52,49 +50,58 @@ static unsigned long *pkm_buffer_last;
 // device cdev struct
 static struct cdev pkmdev_cdev;
 // device file operations
-static int pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
-static int pkmdev_open(struct inode *inode, struct file *f);
-static int pkmdev_release(struct inode *inode, struct file *f);
+static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
+static int _pkmdev_open(struct inode *inode, struct file *f);
+static int _pkmdev_release(struct inode *inode, struct file *f);
 static struct file_operations pkmdev_fops = {
-        .owner = THIS_MODULE,
-        .open = pkmdev_open,
-        .release = pkmdev_release,
-        .mmap = pkmdev_mmap,
+	.owner = THIS_MODULE,
+	.open = _pkmdev_open,
+	.release = _pkmdev_release,
+	.mmap = _pkmdev_mmap,
 };
 
 // open method for character device
-static int pkmdev_open(struct inode *inode, struct file *f)
+// params:	inode pointer - unused
+//			file struct pointer - unused
+// returns: 0
+static int _pkmdev_open(struct inode *inode, struct file *f)
 {
 	return 0;
 }
 
 // close method for character device
-static int pkmdev_release(struct inode *inode, struct file *f)
+// params:	inode pointer - unused
+//			file struct pointer - unused
+// returns: 0
+static int _pkmdev_release(struct inode *inode, struct file *f)
 {
 	return 0;
 }
 
 // mmap function for character device
-static int pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
+// params:	file struct pointer - unused
+//			vma - vm_area_struct to map
+// returns: 0 on success, otherwise an error code
+static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
 {
-        int ret;
-        unsigned long pfn, size;
-        unsigned long start = vma->vm_start;
-        unsigned long length = vma->vm_end - start;
-        void *ptr = pkm_buffer;
+	int ret;
+	unsigned long pfn, size;
+	unsigned long start = vma->vm_start;
+	unsigned long length = vma->vm_end - start;
+	void *ptr = pkm_buffer;
 
-        printk(KERN_INFO "pkm: mmap: start=%lu, length=%lu.\n", start, length);
-        if (vma->vm_pgoff > 0 || length > BUF_SIZE)
-                return -EIO;
-        while (length > 0) {
-                pfn = vmalloc_to_pfn(ptr);
-                size = length < PAGE_SIZE ? length : PAGE_SIZE;
-                if((ret=remap_pfn_range(vma, start, pfn, size, PAGE_SHARED))<0)
-                        return ret;
-                start += PAGE_SIZE;
-                ptr += PAGE_SIZE;
-                length -= PAGE_SIZE;
-        }
+	printk(KERN_INFO "pkm: mmap: start=%lu, length=%lu.\n", start, length);
+	if (vma->vm_pgoff > 0 || length > BUF_SIZE)
+			return -EIO;
+	while (length > 0) {
+		pfn = vmalloc_to_pfn(ptr);
+		size = length < PAGE_SIZE ? length : PAGE_SIZE;
+		if ((ret=remap_pfn_range(vma, start, pfn, size, PAGE_SHARED))<0)
+			return ret;
+		start += PAGE_SIZE;
+		ptr += PAGE_SIZE;
+		length -= PAGE_SIZE;
+	}
 	return 0;
 }
 
@@ -107,59 +114,61 @@ bool update_buffer(void)
 	unsigned long min_flt, maj_flt,utime, stime;
 	struct pkm_task_struct *pkm_task;
 
-        #ifdef DEBUG
+#ifdef DEBUG
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
-        #endif
+#endif
 
 	mutex_lock(&pkm_mutex);
 	if (list_empty(&pkm_tasks)) {
-                mutex_unlock(&pkm_mutex);
+		mutex_unlock(&pkm_mutex);
 		return false;
-        }
-	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
-		if(get_cpu_use(pkm_task->task->pid, &min_flt, &maj_flt,
-                                &utime, &stime)==-1)
-                        continue;
-                pkm_task->maj_flt += maj_flt;
-                pkm_task->min_flt += min_flt;
-                pkm_task->utime += utime;
-                pkm_task->stime += stime;
-
-                total_min_flt += min_flt;
-                total_maj_flt += maj_flt;
-                total_time += utime + stime;
 	}
-        mutex_unlock(&pkm_mutex);
+	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
+		if (get_cpu_use(pkm_task->task->pid, &min_flt, &maj_flt,
+                                &utime, &stime)==-1)
+			continue;
+		pkm_task->maj_flt += maj_flt;
+		pkm_task->min_flt += min_flt;
+		pkm_task->utime += utime;
+		pkm_task->stime += stime;
 
-        *pkm_buffer_pos++ = jiffies;
-        *pkm_buffer_pos++ = total_min_flt;
-        *pkm_buffer_pos++ = total_maj_flt;
-        *pkm_buffer_pos = total_time;
-        // wrap around
-        if (pkm_buffer_pos == pkm_buffer_last)
-                pkm_buffer_pos = pkm_buffer;
-        else
-                pkm_buffer_pos++;
-        *pkm_buffer_pos = -1l; // mark end
-        return true;
+		total_min_flt += min_flt;
+		total_maj_flt += maj_flt;
+		total_time += utime + stime;
+	}
+	mutex_unlock(&pkm_mutex);
+
+	*pkm_buffer_pos++ = jiffies;
+	*pkm_buffer_pos++ = total_min_flt;
+	*pkm_buffer_pos++ = total_maj_flt;
+	*pkm_buffer_pos = total_time;
+	// wrap around
+	if (pkm_buffer_pos == pkm_buffer_last)
+		pkm_buffer_pos = pkm_buffer;
+	else
+		pkm_buffer_pos++;
+	*pkm_buffer_pos = -1l; // mark end
+	return true;
 }
 
 // Work queue worker function
 // params: delayed_work *work - queued work item pointer
 // returns: void
-void monitor_worker(struct work_struct *work)
+void _monitor_worker(struct work_struct *work)
 {
-        #ifdef DEBUG
-	printk(KERN_INFO "pkm: Entered pkm_wrkq worker\n");
-        #endif
-
-	if(update_buffer())
-		schedule_delayed_work(work_item, msecs_to_jiffies(50));
-	else
-		kfree(work);
+#ifdef DEBUG
+	printk(KERN_INFO "pkm: Entered _monitor_worker\n");
+#endif
+	if (update_buffer())
+		schedule_delayed_work(work_item, (HZ/WORKER_FREQ));
+#ifdef DEBUG
+	printk(KERN_INFO "pkm: Exiting _monitor_worker\n");
+#endif
 }
 
 // find task from task list
+// params: pid to be searched for in task list
+// returns: pkm_task_sturct for PID or NULL if task isn't found
 static struct pkm_task_struct *_find_pkm_task(pid_t pid)
 {
 	struct pkm_task_struct *pkm_task;
@@ -170,6 +179,9 @@ static struct pkm_task_struct *_find_pkm_task(pid_t pid)
     return NULL;
 }
 
+// removes a task from the list
+// params: PID of task to remove
+// returns: removed task
 static struct pkm_task_struct *_remove_pkm_task(pid_t pid)
 {
 	struct list_head *ptr, *tmp;
@@ -185,7 +197,9 @@ static struct pkm_task_struct *_remove_pkm_task(pid_t pid)
 }
 
 // allocate and initialize a task
-// returns NULL if get_cpu_use fails to get values
+// params: task_struct and pid to be used for new pkm_task_struct
+// returns: new pkm_task_sturct or NULL if get_cpu_use fails to get values or
+// 			kmalloc fails
 struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 {
 	int ret;
@@ -207,21 +221,30 @@ struct pkm_task_struct *_create_pkm_task(struct task_struct *task, pid_t pid)
 }
 
 // Add process to PCB list and create a work queue job if the PCB list is empty
+// params: PID to begin monitoring
+// returns: 0 on success, int error value otherwise
 static int register_pkm_task(pid_t pid)
 {
 	struct task_struct *task;
 	struct pkm_task_struct *pkm_task;
 	int err = -1;
 	bool listwasempty = false;
+	void *ptr;
 
 	printk(KERN_INFO "pkm: %d registering entry at %lu.\n", pid, jiffies);
 	task = find_task_by_pid(pid);
 	if (!task)
 		return -ESRCH;
-	// optimistically allocate task outside of critical region
+	// optimistically allocate task and work item outside of critical region
 	pkm_task = _create_pkm_task(task, pid);
 	if (!pkm_task)
 		return -ENOMEM;
+	ptr = kmalloc(sizeof(struct delayed_work), GFP_KERNEL);
+	if (!work_item)	{
+		kfree(pkm_task);
+		return -ENOMEM;
+	}
+	
 	// critical section: add task if not already present
 	mutex_lock(&pkm_mutex);
 	if (_find_pkm_task(pid)) {
@@ -233,56 +256,57 @@ static int register_pkm_task(pid_t pid)
 	list_add_tail(&pkm_task->list, &pkm_tasks);
 	mutex_unlock(&pkm_mutex);
 	//Create work queue job if PCB list was empty
-	if(listwasempty) {
+	if (listwasempty) {
 		mutex_lock(&pkm_workitem_mutex);
-		work_item = kmalloc(sizeof(struct delayed_work), GFP_KERNEL);
-                if (!work_item) // TODO: remove task from list?
-                        return -ENOMEM;
-		INIT_DELAYED_WORK(work_item, monitor_worker);
-		schedule_delayed_work(work_item, msecs_to_jiffies(50));
+		work_item = ptr;
+		INIT_DELAYED_WORK(work_item, _monitor_worker);
+		schedule_delayed_work(work_item, (HZ/WORKER_FREQ));
 		mutex_unlock(&pkm_workitem_mutex);
 	}
 	return 0;
 error:
 	mutex_unlock(&pkm_mutex);
 	kfree(pkm_task);
+	kfree(ptr);
 	return err;
 }
 
 // Remove a task from the list and free it
+// params: PID to deregister
+// returns: 0
 static int deregister_pkm_task(pid_t pid)
 {
-	bool listempty = false;
 	struct pkm_task_struct *pkm_task;
 	printk(KERN_INFO "pkm: %d deregistering entry at %lu.\n", pid, jiffies);
 	mutex_lock(&pkm_mutex);
 	pkm_task =_remove_pkm_task(pid);
-	if (pkm_task == NULL) {
-		//printk(KERN_INFO "pkm: Deregister %d could not be found!\n", pid);
-	}
-        if (list_empty(&pkm_tasks)) {
-		listempty = true;
-	}
-	mutex_unlock(&pkm_mutex);
-	if (pkm_task)
-		kfree(pkm_task);
-	if(listempty) {
+	if (list_empty(&pkm_tasks)) {
+		mutex_unlock(&pkm_mutex);
 		// delete workqueue jobs
 		mutex_lock(&pkm_workitem_mutex);
-		if(work_item) {
-			if(cancel_delayed_work(work_item)==0)
-				flush_workqueue(pkm_wrkq);
+		if (work_item) {
+			cancel_delayed_work_sync(work_item);
 			kfree(work_item);
-                        work_item = NULL;
+			work_item = NULL;
 		}
 		mutex_unlock(&pkm_workitem_mutex);
 	}
+	else
+		mutex_unlock(&pkm_mutex);
+	if (pkm_task)
+		kfree(pkm_task);
+	
 	printk(KERN_INFO "pkm: %d deregistering exit.\n", pid);
 	return 0;
 }
 
 // Get input from usermode app and take action on it
-int pkm_write_proc(struct file *file, const char __user *user_buf,
+// params: 	file - unused file struct pointer
+//			user_buf - data to copy in
+//			count - size of buffer
+//			data - unused
+// returns: count on success, otherwise an error code
+int _pkm_write_proc(struct file *file, const char __user *user_buf,
                         unsigned long count, void *data)
 {
 	char *buf;
@@ -321,6 +345,13 @@ int pkm_write_proc(struct file *file, const char __user *user_buf,
 }
 
 // Print registered process list to proc special file
+// params:	page - buffer to use for data
+//			start - pointer to pointer to characters (unused)
+//			off - offset into file (unused)
+//			count - size of buffer
+//			eof - end of file indicator (unused)
+//			data - pointer to data (unused)
+// returns: size of data written
 int pkm_read_proc(char *page, char **start, off_t off,
                         int count, int *eof, void *data)
 {
@@ -338,16 +369,17 @@ int pkm_read_proc(char *page, char **start, off_t off,
 }
 
 // module init - sets up structes, registeres proc file and creates the
-// workqueue
+// 				 workqueue
+// returns: 0 on success, otherwise retrns an error code
 static int _pkm_init(void)
 {
 	struct proc_dir_entry *proc_dir;
 	int err, i;
-        dev_t dev;
+	dev_t dev;
 
-        #ifdef DEBUG
+#ifdef DEBUG
 	printk(KERN_INFO "pkm: module starting.\n");
-        #endif
+#endif
 
 	// create proc directory and file and set functions
 	proc_dir = proc_mkdir_mode(DIR_NAME, S_IRUGO | S_IXUGO, NULL);
@@ -361,42 +393,33 @@ static int _pkm_init(void)
 		goto error_rmd;
 	}
 	proc_file->read_proc = pkm_read_proc;
-	proc_file->write_proc = pkm_write_proc;
+	proc_file->write_proc = _pkm_write_proc;
 
-	// Create workqueue
-	pkm_wrkq = create_workqueue("pkm_wrkq");
-	if (!pkm_wrkq) {
+	// allocate buffer and initialize pages and positions
+	pkm_buffer = vmalloc(BUF_SIZE);
+	if (!pkm_buffer) {
 		err = -ENOMEM;
 		goto error_rm;
 	}
+	for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
+		SetPageReserved(vmalloc_to_page(pkm_buffer+i));
+	pkm_buffer_pos = pkm_buffer;
+	pkm_buffer_last = pkm_buffer + (BUF_SIZE - sizeof(unsigned long));
 
-        // allocate buffer and initialize pages and positions
-        pkm_buffer = vmalloc(BUF_SIZE);
-        if (!pkm_buffer) {
-                err = -ENOMEM;
-                goto error_dw;
-        }
-        for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
-                SetPageReserved(vmalloc_to_page(pkm_buffer+i));
-        pkm_buffer_pos = pkm_buffer;
-        pkm_buffer_last = pkm_buffer + (BUF_SIZE - sizeof(unsigned long));
+	// initialize and add device driver
+	if ((err = alloc_chrdev_region(&dev, 0, 1, PKM_NAME)))
+		goto error_rm;
+	cdev_init(&pkmdev_cdev, &pkmdev_fops);
+	if ((err = cdev_add(&pkmdev_cdev, dev, 1)))
+		goto error_udv;
 
-        // initialize and add device driver
-        if ((err = alloc_chrdev_region(&dev, 0, 1, PKM_NAME)))
-                goto error_dw;
-        cdev_init(&pkmdev_cdev, &pkmdev_fops);
-        if ((err = cdev_add(&pkmdev_cdev, dev, 1)))
-                goto error_udv;
-
-        #ifdef DEBUG
+#ifdef DEBUG
 	printk(KERN_INFO "pkm: module started.\n");
-        #endif
+#endif
 	return 0;
 
 error_udv:
         unregister_chrdev_region(dev, 1);
-error_dw:
-        destroy_workqueue(pkm_wrkq);
 error_rm:
 	remove_proc_entry(FILE_NAME, proc_dir);
 error_rmd:
@@ -412,11 +435,11 @@ static void pkm_exit(void)
 	struct list_head *ptr, *tmp;
 	struct pkm_task_struct *task;
 	int i;
-        dev_t dev;
+	dev_t dev;
 
-        #ifdef DEBUG
+#ifdef DEBUG
 	printk(KERN_INFO "pkm: module stopping.\n");
-        #endif
+#endif
 
 	// remove proc directory and file
 	if (proc_file) {
@@ -428,20 +451,17 @@ static void pkm_exit(void)
 	mutex_lock(&pkm_workitem_mutex);
 	if (work_item) {	
 		mutex_unlock(&pkm_workitem_mutex);
-		cancel_delayed_work(work_item);
+		cancel_delayed_work_sync(work_item);
 	}
 	else
 		mutex_unlock(&pkm_workitem_mutex);
-	if (pkm_wrkq) {
-		flush_workqueue(pkm_wrkq);
-		destroy_workqueue(pkm_wrkq);
-	}
+
 	mutex_lock(&pkm_workitem_mutex);
 	if (work_item)
 		kfree(work_item);
 	mutex_unlock(&pkm_workitem_mutex);
 
-        // free task list
+	// free task list
 	mutex_lock(&pkm_mutex);
 	list_for_each_safe(ptr, tmp, &pkm_tasks) {
 		task = list_entry(ptr, struct pkm_task_struct, list);
@@ -450,21 +470,21 @@ static void pkm_exit(void)
 	}
 	mutex_unlock(&pkm_mutex);
 
-        // free profile buffer
-        if (pkm_buffer) {
-                for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
-                        ClearPageReserved(vmalloc_to_page(pkm_buffer+i));
-                vfree(pkm_buffer);
-        }
+	// free profile buffer
+	if (pkm_buffer) {
+		for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
+			ClearPageReserved(vmalloc_to_page(pkm_buffer+i));
+		vfree(pkm_buffer);
+	}
 
-        // unregister device driver
-        dev = pkmdev_cdev.dev;
-        cdev_del(&pkmdev_cdev);
-        unregister_chrdev_region(dev, 1);
+	// unregister device driver
+	dev = pkmdev_cdev.dev;
+	cdev_del(&pkmdev_cdev);
+	unregister_chrdev_region(dev, 1);
 
-        #ifdef DEBUG
+#ifdef DEBUG
 	printk(KERN_INFO "pkm: module stopped.\n");
-        #endif
+#endif
 }
 
 module_init(_pkm_init);
