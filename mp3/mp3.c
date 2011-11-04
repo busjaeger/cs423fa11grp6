@@ -23,6 +23,20 @@
 
 #define BUF_SIZE 131072 * sizeof(unsigned long)         // half MB for 4 bytes
 
+// device file operations
+static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
+static int _pkmdev_open(struct inode *inode, struct file *f);
+static int _pkmdev_release(struct inode *inode, struct file *f);
+
+// device file operations struct
+static struct file_operations pkmdev_fops = {
+	.owner = THIS_MODULE,
+	.open = _pkmdev_open,
+	.release = _pkmdev_release,
+	.mmap = _pkmdev_mmap,
+};
+
+// module task struct
 struct pkm_task_struct {
 	struct task_struct* task;
 	struct list_head list;
@@ -32,33 +46,24 @@ struct pkm_task_struct {
 	unsigned long stime;
 };
 
-// task list mutex
-static DEFINE_MUTEX(pkm_mutex);
 // proc directory stats file
 static struct proc_dir_entry *proc_file;
 // task list
 static LIST_HEAD(pkm_tasks);
+// task list mutex
+static DEFINE_MUTEX(pkm_tasks_mutex);
+// worker mutex
+static DEFINE_MUTEX(pkm_work_mutex);
 // work item pointer
-struct delayed_work *work_item;
-//work item mutex
-static DEFINE_MUTEX(pkm_workitem_mutex);
-// memory mapped profiling buffer
-static void *pkm_buffer;
-// pointers to current and last position in buffer
-static unsigned long *pkm_buffer_pos;
+struct delayed_work *pkm_work;
+// pointer to first position in memory mapped profiling buffer (immutable)
+static unsigned long *pkm_buffer_first;
+// pointer to last position in memory mapped profiling buffer (immutable)
 static unsigned long *pkm_buffer_last;
+// pointers to current and last position in buffer (mutable)
+static unsigned long *pkm_buffer_pos;
 // device cdev struct
 static struct cdev pkmdev_cdev;
-// device file operations
-static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma);
-static int _pkmdev_open(struct inode *inode, struct file *f);
-static int _pkmdev_release(struct inode *inode, struct file *f);
-static struct file_operations pkmdev_fops = {
-	.owner = THIS_MODULE,
-	.open = _pkmdev_open,
-	.release = _pkmdev_release,
-	.mmap = _pkmdev_mmap,
-};
 
 // open method for character device
 // params:	inode pointer - unused
@@ -88,7 +93,7 @@ static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long pfn, size;
 	unsigned long start = vma->vm_start;
 	unsigned long length = vma->vm_end - start;
-	void *ptr = pkm_buffer;
+	void *ptr = pkm_buffer_first;
 
 	printk(KERN_INFO "pkm: mmap: start=%lu, length=%lu.\n", start, length);
 	if (vma->vm_pgoff > 0 || length > BUF_SIZE)
@@ -96,7 +101,8 @@ static int _pkmdev_mmap(struct file *f, struct vm_area_struct *vma)
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(ptr);
 		size = length < PAGE_SIZE ? length : PAGE_SIZE;
-		if ((ret=remap_pfn_range(vma, start, pfn, size, PAGE_SHARED))<0)
+                ret = remap_pfn_range(vma, start, pfn, size, PAGE_SHARED);
+		if (ret < 0)
 			return ret;
 		start += PAGE_SIZE;
 		ptr += PAGE_SIZE;
@@ -118,11 +124,12 @@ bool update_buffer(void)
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
 #endif
 
-	mutex_lock(&pkm_mutex);
+        mutex_lock(&pkm_work_mutex);
 	if (list_empty(&pkm_tasks)) {
-		mutex_unlock(&pkm_mutex);
+		mutex_unlock(&pkm_work_mutex);
 		return false;
 	}
+	mutex_lock(&pkm_tasks_mutex);
 	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
 		if (get_cpu_use(pkm_task->task->pid, &min_flt, &maj_flt,
                                 &utime, &stime)==-1)
@@ -136,7 +143,8 @@ bool update_buffer(void)
 		total_maj_flt += maj_flt;
 		total_time += utime + stime;
 	}
-	mutex_unlock(&pkm_mutex);
+	mutex_unlock(&pkm_tasks_mutex);
+        mutex_unlock(&pkm_work_mutex);
 
 	*pkm_buffer_pos++ = jiffies;
 	*pkm_buffer_pos++ = total_min_flt;
@@ -144,7 +152,7 @@ bool update_buffer(void)
 	*pkm_buffer_pos = total_time;
 	// wrap around
 	if (pkm_buffer_pos == pkm_buffer_last)
-		pkm_buffer_pos = pkm_buffer;
+		pkm_buffer_pos = pkm_buffer_first;
 	else
 		pkm_buffer_pos++;
 	*pkm_buffer_pos = -1l; // mark end
@@ -154,15 +162,15 @@ bool update_buffer(void)
 // Work queue worker function
 // params: delayed_work *work - queued work item pointer
 // returns: void
-void _monitor_worker(struct work_struct *work)
+void monitor_worker(struct work_struct *w)
 {
 #ifdef DEBUG
-	printk(KERN_INFO "pkm: Entered _monitor_worker\n");
+	printk(KERN_INFO "pkm: Entered monitor_worker\n");
 #endif
 	if (update_buffer())
-		schedule_delayed_work(work_item, (HZ/WORKER_FREQ));
+		schedule_delayed_work(pkm_work, (HZ/WORKER_FREQ));
 #ifdef DEBUG
-	printk(KERN_INFO "pkm: Exiting _monitor_worker\n");
+	printk(KERN_INFO "pkm: Exiting monitor_worker\n");
 #endif
 }
 
@@ -228,46 +236,34 @@ static int register_pkm_task(pid_t pid)
 	struct task_struct *task;
 	struct pkm_task_struct *pkm_task;
 	int err = -1;
-	bool listwasempty = false;
-	void *ptr;
 
 	printk(KERN_INFO "pkm: %d registering entry at %lu.\n", pid, jiffies);
-	task = find_task_by_pid(pid);
-	if (!task)
+	if (!(task = find_task_by_pid(pid)))
 		return -ESRCH;
-	// optimistically allocate task and work item outside of critical region
-	pkm_task = _create_pkm_task(task, pid);
-	if (!pkm_task)
+	// optimistically allocate task outside of critical region
+	if (!(pkm_task = _create_pkm_task(task, pid)))
 		return -ENOMEM;
-	ptr = kmalloc(sizeof(struct delayed_work), GFP_KERNEL);
-	if (!work_item)	{
-		kfree(pkm_task);
-		return -ENOMEM;
-	}
-	
 	// critical section: add task if not already present
-	mutex_lock(&pkm_mutex);
+	mutex_lock(&pkm_tasks_mutex);
 	if (_find_pkm_task(pid)) {
 		err = -EEXIST;
 		goto error;
 	}
-	if (list_empty(&pkm_tasks))
-		listwasempty = true;
+	if (list_empty(&pkm_tasks)) {
+                pkm_work = kmalloc(sizeof(struct delayed_work), GFP_KERNEL);
+                if (!pkm_work) {
+                        err = -ENOMEM;
+                        goto error;
+                }
+		INIT_DELAYED_WORK(pkm_work, monitor_worker);
+		schedule_delayed_work(pkm_work, (HZ/WORKER_FREQ));
+        }
 	list_add_tail(&pkm_task->list, &pkm_tasks);
-	mutex_unlock(&pkm_mutex);
-	//Create work queue job if PCB list was empty
-	if (listwasempty) {
-		mutex_lock(&pkm_workitem_mutex);
-		work_item = ptr;
-		INIT_DELAYED_WORK(work_item, _monitor_worker);
-		schedule_delayed_work(work_item, (HZ/WORKER_FREQ));
-		mutex_unlock(&pkm_workitem_mutex);
-	}
+	mutex_unlock(&pkm_tasks_mutex);
 	return 0;
 error:
-	mutex_unlock(&pkm_mutex);
+	mutex_unlock(&pkm_tasks_mutex);
 	kfree(pkm_task);
-	kfree(ptr);
 	return err;
 }
 
@@ -278,24 +274,23 @@ static int deregister_pkm_task(pid_t pid)
 {
 	struct pkm_task_struct *pkm_task;
 	printk(KERN_INFO "pkm: %d deregistering entry at %lu.\n", pid, jiffies);
-	mutex_lock(&pkm_mutex);
+
+        mutex_lock(&pkm_work_mutex);
+	mutex_lock(&pkm_tasks_mutex);
 	pkm_task =_remove_pkm_task(pid);
+        mutex_unlock(&pkm_work_mutex);
+        if (!pkm_task) {
+                mutex_unlock(&pkm_tasks_mutex);
+                return -ESRCH;
+        }
 	if (list_empty(&pkm_tasks)) {
-		mutex_unlock(&pkm_mutex);
-		// delete workqueue jobs
-		mutex_lock(&pkm_workitem_mutex);
-		if (work_item) {
-			cancel_delayed_work_sync(work_item);
-			kfree(work_item);
-			work_item = NULL;
-		}
-		mutex_unlock(&pkm_workitem_mutex);
-	}
-	else
-		mutex_unlock(&pkm_mutex);
+                cancel_delayed_work_sync(pkm_work);
+                kfree(pkm_work);
+        }
+        mutex_unlock(&pkm_tasks_mutex);
 	if (pkm_task)
 		kfree(pkm_task);
-	
+
 	printk(KERN_INFO "pkm: %d deregistering exit.\n", pid);
 	return 0;
 }
@@ -358,12 +353,12 @@ int pkm_read_proc(char *page, char **start, off_t off,
 	char *ptr = page;
 	struct pkm_task_struct *pkm_task;
 
-	mutex_lock(&pkm_mutex);
+	mutex_lock(&pkm_tasks_mutex);
 	list_for_each_entry(pkm_task, &pkm_tasks, list)	{
 		// Output: PID
 		ptr += sprintf( ptr, "%d\n", pkm_task->task->pid);
 	}
-	mutex_unlock(&pkm_mutex);
+	mutex_unlock(&pkm_tasks_mutex);
 
 	return ptr - page;
 }
@@ -396,15 +391,15 @@ static int _pkm_init(void)
 	proc_file->write_proc = _pkm_write_proc;
 
 	// allocate buffer and initialize pages and positions
-	pkm_buffer = vmalloc(BUF_SIZE);
-	if (!pkm_buffer) {
+	pkm_buffer_first = vmalloc(BUF_SIZE);
+	if (!pkm_buffer_first) {
 		err = -ENOMEM;
 		goto error_rm;
 	}
 	for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
-		SetPageReserved(vmalloc_to_page(pkm_buffer+i));
-	pkm_buffer_pos = pkm_buffer;
-	pkm_buffer_last = pkm_buffer + (BUF_SIZE - sizeof(unsigned long));
+		SetPageReserved(vmalloc_to_page((void *)pkm_buffer_first+i));
+	pkm_buffer_pos = pkm_buffer_first;
+	pkm_buffer_last = (void *)pkm_buffer_first + (BUF_SIZE - sizeof(unsigned long));
 
 	// initialize and add device driver
 	if ((err = alloc_chrdev_region(&dev, 0, 1, PKM_NAME)))
@@ -447,34 +442,28 @@ static void pkm_exit(void)
 		remove_proc_entry(DIR_NAME, NULL);
 	}
 
-	// clean up work queue
-	mutex_lock(&pkm_workitem_mutex);
-	if (work_item) {	
-		mutex_unlock(&pkm_workitem_mutex);
-		cancel_delayed_work_sync(work_item);
-	}
-	else
-		mutex_unlock(&pkm_workitem_mutex);
-
-	mutex_lock(&pkm_workitem_mutex);
-	if (work_item)
-		kfree(work_item);
-	mutex_unlock(&pkm_workitem_mutex);
-
-	// free task list
-	mutex_lock(&pkm_mutex);
-	list_for_each_safe(ptr, tmp, &pkm_tasks) {
-		task = list_entry(ptr, struct pkm_task_struct, list);
-		list_del(ptr);
-		kfree(task);
-	}
-	mutex_unlock(&pkm_mutex);
+	// if necessary, free remaining tasks and stop worker
+	mutex_lock(&pkm_work_mutex);
+        mutex_lock(&pkm_tasks_mutex);
+        if (!list_empty(&pkm_tasks)) {
+                list_for_each_safe(ptr, tmp, &pkm_tasks) {
+                        task = list_entry(ptr, struct pkm_task_struct, list);
+                        list_del(ptr);
+                        kfree(task);
+                }
+                mutex_unlock(&pkm_work_mutex);
+                cancel_delayed_work_sync(pkm_work);
+                kfree(pkm_work);
+        } else {
+                mutex_unlock(&pkm_work_mutex);
+        }
+        mutex_unlock(&pkm_tasks_mutex);
 
 	// free profile buffer
-	if (pkm_buffer) {
+	if (pkm_buffer_first) {
 		for(i=0; i<BUF_SIZE; i+=PAGE_SIZE)
-			ClearPageReserved(vmalloc_to_page(pkm_buffer+i));
-		vfree(pkm_buffer);
+			ClearPageReserved(vmalloc_to_page((void *)pkm_buffer_first + i));
+		vfree(pkm_buffer_first);
 	}
 
 	// unregister device driver
