@@ -140,6 +140,7 @@ bool update_buffer(void)
                 pkm_buffer_pos = pkm_buffer;
         else
                 pkm_buffer_pos++;
+        *pkm_buffer_pos = -1l; // mark end
         return true;
 }
 
@@ -213,6 +214,7 @@ static int register_pkm_task(pid_t pid)
 	int err = -1;
 	bool listwasempty = false;
 
+	printk(KERN_INFO "pkm: %d registering entry at %lu.\n", pid, jiffies);
 	task = find_task_by_pid(pid);
 	if (!task)
 		return -ESRCH;
