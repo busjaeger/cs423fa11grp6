@@ -1,0 +1,78 @@
+The following structure will be placed at the beginning of the shared buffer:
+
+unsigned long *write_pos;
+unsigned long *read_pos;
+int canceled;
+mutex_t mutex;
+
+Note that in the simplest case, the mutex may be an integer initialized to 0 and both user and kernel
+space implement the lock and unlock functions using test-and-set instructions. Busy wait would be acceptable
+in the solution presented below, because lock contention minimal. It is also assumed that kernel and user
+process define the constants SIZE (size of buffer) and OFFSET (length of shared structure) with the same
+values.
+
+## kernel init
+buffer_first = allocate buffer of size 'SIZE'
+buffer_last = buffer_first + SIZE
+write_pos = buffer_first + OFFSET
+read_pos = buffer_first + OFFSET
+canceled = false
+mutex = init mutex
+
+## kernel thread
+while (true) {
+  sleep(50ms);
+  // read profile data
+  lock(mutex);
+  if (canceled) {
+    unlock(mutex);
+    break;
+  }
+  write_pos++=jiffies;
+  write_pos++=min;
+  write_pos++=maj;
+  write_pos=time;
+  if (write_pos == buffer_last)
+    write_pos = buffer_first + OFFSET;
+  else
+    write_pos++;
+  unlock(mutex);
+}
+
+## monitor init
+buffer_first = map memory area of SIZE
+buffer_last = buffer_first + SIZE;
+
+## monitor thread
+current_read_pos;
+current_write_pos;
+current_canceled;
+log_buf;
+while (true) {
+  sleep(30s);
+  lock(mutex);
+  current_read_pos = read_pos;
+  current_write_pos = write_pos;
+  current_canceled = canceled;
+  unlock(mutex);
+  while (current_read_pos != current_write_pos) {
+    log_buf[i++] = *current_read_pos++;
+    log_buf[i++] = *current_read_pos++;
+    log_buf[i++] = *current_read_pos++;
+    log_buf[i++] = *current_read_pos;
+    if (current_read_pos == buffer_last)
+      current_read_pos = buffer_first + OFFSET;
+    else
+      current_read_pos++;
+  }
+  log(log_buf);
+  lock(mutex);
+  read_pos = current_read_pos;
+  unlock(mutex);
+  if (current_canceled)
+    break;
+}
+
+The assumption built into this solution is that the profiling thread will never be fast enough to wrap
+around the cyclic buffer to overwrite entries the monitor has not yet read. In particular, this means
+the monitor thread has to be started concurrently or shortly after the log thread.
