@@ -52,10 +52,12 @@ static struct proc_dir_entry *proc_file;
 static LIST_HEAD(pkm_tasks);
 // task list mutex
 static DEFINE_MUTEX(pkm_tasks_mutex);
-// worker mutex
-static DEFINE_MUTEX(pkm_work_mutex);
 // work item pointer
 struct delayed_work *pkm_work;
+// worker mutex
+static DEFINE_MUTEX(canceled_mutex);
+// flag indicating whether worker is canceled
+static int canceled;
 // pointer to first position in memory mapped profiling buffer (immutable)
 static unsigned long *pkm_buffer_first;
 // pointer to last position in memory mapped profiling buffer (immutable)
@@ -124,9 +126,9 @@ bool update_buffer(void)
 	printk(KERN_INFO "pkm: Entered update_buffer\n");
 #endif
 
-        mutex_lock(&pkm_work_mutex);
-	if (list_empty(&pkm_tasks)) {
-		mutex_unlock(&pkm_work_mutex);
+        mutex_lock(&canceled_mutex);
+	if (canceled) {
+		mutex_unlock(&canceled_mutex);
 		return false;
 	}
 	mutex_lock(&pkm_tasks_mutex);
@@ -144,7 +146,7 @@ bool update_buffer(void)
 		total_time += utime + stime;
 	}
 	mutex_unlock(&pkm_tasks_mutex);
-        mutex_unlock(&pkm_work_mutex);
+        mutex_unlock(&canceled_mutex);
 
 	*pkm_buffer_pos++ = jiffies;
 	*pkm_buffer_pos++ = total_min_flt;
@@ -275,17 +277,22 @@ static int deregister_pkm_task(pid_t pid)
 	struct pkm_task_struct *pkm_task;
 	printk(KERN_INFO "pkm: %d deregistering entry at %lu.\n", pid, jiffies);
 
-        mutex_lock(&pkm_work_mutex);
+        mutex_lock(&canceled_mutex);
 	mutex_lock(&pkm_tasks_mutex);
 	pkm_task =_remove_pkm_task(pid);
-        mutex_unlock(&pkm_work_mutex);
         if (!pkm_task) {
                 mutex_unlock(&pkm_tasks_mutex);
+                mutex_unlock(&canceled_mutex);
                 return -ESRCH;
         }
-	if (list_empty(&pkm_tasks)) {
+        if (list_empty(&pkm_tasks)) {
+                canceled = 1;
+                mutex_unlock(&canceled_mutex);
                 cancel_delayed_work_sync(pkm_work);
                 kfree(pkm_work);
+                canceled = 0;
+        } else {
+                mutex_unlock(&canceled_mutex);
         }
         mutex_unlock(&pkm_tasks_mutex);
 	if (pkm_task)
@@ -443,7 +450,7 @@ static void pkm_exit(void)
 	}
 
 	// if necessary, free remaining tasks and stop worker
-	mutex_lock(&pkm_work_mutex);
+	mutex_lock(&canceled_mutex);
         mutex_lock(&pkm_tasks_mutex);
         if (!list_empty(&pkm_tasks)) {
                 list_for_each_safe(ptr, tmp, &pkm_tasks) {
@@ -451,11 +458,13 @@ static void pkm_exit(void)
                         list_del(ptr);
                         kfree(task);
                 }
-                mutex_unlock(&pkm_work_mutex);
+                canceled = 1;
+                mutex_unlock(&canceled_mutex);
                 cancel_delayed_work_sync(pkm_work);
                 kfree(pkm_work);
+                canceled = 0;
         } else {
-                mutex_unlock(&pkm_work_mutex);
+                mutex_unlock(&canceled_mutex);
         }
         mutex_unlock(&pkm_tasks_mutex);
 
