@@ -1,19 +1,15 @@
 Case Study 2: Multiprogramming
 
 observation:
-total cpu utilization increases as N increases (fourth graph)
+why does cpu utilization spike at the end?
 
 
 
-observation:
-(completion time, figure this out by looking at how many profiled reads for each? N = 1, 402 reads; N = 5, 410 reads; N = 11 419 reads)
+For case study 2, we increased the memory used by each work process to 200 MB, so that in the scenario where N = 11, those 11 processes would use up 2.2 GB of memory, which is more than the 2 GB our VM has. In the cases where no major page faults occured is due to the fact that these workloads did not exceed the 2 GB memory limit of our VM.
 
+N = 1: Utilization starts out at ~40% and gradually drops by 10% and then by 5% and lower, to then vary between ~4% and ~8% before spiking back up to ~30% at the very end of the process' lifetime. No major faults occur, only minor.
 
+N = 5: Utilization starts out at about ~90% and stays high for a little while before dropping 20% gradually over time before hovering between ~5% to ~20%, and then spiking again at the end to ~75%. No major faults occur, only minor. 
 
-observation:
-cpu utilization starts out high and then tapers; when N = 5 and N = 11, cpu utilization spikes at the end (why?)
+N = 11: utilization starts out consistently high in the 90s, then falls very low before major page faults start to occur and then we see the cpu utilization constantly go up and down as thrashing occurs (the processes that are running require too much memory and pages need to be paged in and out for the different processes). Thrashing caused this workload to take much longer to complete, where in the cases N = 1 and N = 5, 403 and 412 profiled reads were taken, respectively, in the case of N = 11, it recorded 1918 profiled reads, about 4 times the length to run to completion.
 
-
-
-observation:
-no major page faults
