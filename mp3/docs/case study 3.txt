@@ -5,87 +5,77 @@ consumer problem. Two requirements need to be met to ensure proper synchronizati
 2. sequencing: access must be properly sequenced to ensure the producer only adds entries if space is available
    and the consumer only removes entries if present
 
-Ideally, the monitor thread and the profiling thread would share synchronization primitives via the shared
-memory area. In this case, the access could be synchronized using two semaphores and a mutex:
+If it is possible for the montoring user process and the profiling kernel thread to share synchronization
+primitives through the shared buffer and call the operations on those primitives from their respective
+spaces, then access could be synchronized with the following shared data structure placed at the beginning
+of the memory buffer:
+
+unsigned long *write_pos
+unsigned long *read_pos
+long canceled
+semaphore full
+semaphore empty
+mutex lock
+
+kernel and user share constants SIZE (size of buffer) and OFFSET (start of profiling data within buffer)
 
 ## kernel init
-buffer_pos = vmalloc(SIZE);
-buffer_first = buffer_pos;
-buffer_last = buffer_pos + SIZE;
-full = new_sem(buffer_pos, 0); // second arg is count
-buffer_pos += sizeof(sem);
-empty = new_sem(buffer_pos, SIZE/4);
-buffer_pos += sizeof(sem);
-lock = new_mutex(buffer_pos);
-buffer_pos; += sizeof(mutex);
-canceled = buffer_pos;
-*canceled = 0;
-buffer_pos += sizeof(long);
-offset = buffer_pos;
-// start profile thread
+buffer_first = allocate buffer SIZE
+buffer_last = buffer_first + SIZE
+write_pos = buffer_first + OFFSET
+read_pos = buffer_first + OFFSET
+canceled = false
+full = new semaphore initilized to '0'
+empty = new semaphore initialized to 'SIZE/4'
+lock = new mutex
+start profile thread
 
 ## kernel profile thread
-while(!*canceled) {
+while(!canceled) {
   //read process data
   down(empty);
   lock(lock);
-  buffer++=jiffies;
-  buffer++=min;
-  buffer++=maj;
-  buffer=time;
-  if (buffer_pos == buffer_last)
-    buffer_pos = offset;
+  write_pos++=jiffies;
+  write_pos++=min;
+  write_pos++=maj;
+  write_pos=time;
+  if (write_pos == buffer_last)
+    write_pos = buffer_first + OFFSET;
   else
-    buffer_pos++;
-  buffer_pos = -1;
+    write_pos++;
   unlock(lock);
   up(full);
 }
 
 ## monitor init:
-buffer = mmap(...)
-buffer_first = buffer_pos;
-buffer_last = buffer_pos + SIZE;
-full = buffer;
-buffer_pos += sizeof(sem);
-empty = buffer;
-buffer_pos += sizeof(sem);
-lock = new_mutex(buffer_pos);
-buffer_pos += sizeof(mutex);
-canceled = buffer_pos;
-buffer_pos += sizeof(long);
-offset = buffer_pos;
+buffer_first = map memory area of SIZE
+buffer_last = buffer_first + SIZE;
 
 ## monitor thread:
-//advance to where data starts
-lock_mutex(lock);
-while (buffer_pos == -1) {
-  buffer_pos++;
-  if (buffer_pos == buffer_last)
-    break;
-}
-unlock_mutex(lock);
-
 log_buf;
 done;
 while (true) {
   down(full);
   lock(lock);
-  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
-  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
-  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
-  log_buf[i++] = *buffer_pos; buffer_pos = -1;
-  if (buffer_pos == buffer_last)
-    buffer_pos = offset;
+  log_buf[i++] = *read_pos++;
+  log_buf[i++] = *read_pos++;
+  log_buf[i++] = *read_pos++;
+  log_buf[i++] = *read_pos;
+  if (read_pos == buffer_last)
+    read_pos = buffer_first + OFFSET;
   else
-    buffer_pos++;
-  done = *canceled && *buffer_pos == -1;
+    read_pos++;
+  done = canceled;
   unlock(lock);
   up(empty);
-  if (log_buf limit)
-     dump(log_buf);
-  if (done)
+
+  if (log_buf.size > threshold)
+    dump(log_buf)
+
+  if (done && read_pos == write_pos) {
+    dump(log_buf)
     break;
+  }
 }
 
 This relies on the assumption that semaphores and mutexes can be shared by user and kernel mode. The semaphore
@@ -93,9 +83,4 @@ functions called from user space would likely need to enter kernel space, i.e. i
 implementation than the kernel space version, but should act on the same memory region. The approach also
 requires frequent locking even though the buffer is quite large. Another issue is that the monitor thread blocks
 if the full buffer has been written, but the monitor has not read it. No data is lost, but the next profiling
-interval will be much larger, therefore information may be lost. Therefore, it may be desirable to instead
-continuously write into the circular buffer, possibly overwriting older profile values.
-
-A solution that relaxes the strict synchronization requirements and does not rely on shared synchronization
-primitives is as follows.
-
+interval will be much larger, therefore precision is lost.
