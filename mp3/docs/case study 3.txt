@@ -1,0 +1,101 @@
+If the shared buffer needs to be accessed concurrently, then this becomes an instance of the producer/
+consumer problem. Two requirements need to be met to ensure proper synchronization:
+
+1. mutual exclusion: only one thread should access the shared buffer at any given time
+2. sequencing: access must be properly sequenced to ensure the producer only adds entries if space is available
+   and the consumer only removes entries if present
+
+Ideally, the monitor thread and the profiling thread would share synchronization primitives via the shared
+memory area. In this case, the access could be synchronized using two semaphores and a mutex:
+
+## kernel init
+buffer_pos = vmalloc(SIZE);
+buffer_first = buffer_pos;
+buffer_last = buffer_pos + SIZE;
+full = new_sem(buffer_pos, 0); // second arg is count
+buffer_pos += sizeof(sem);
+empty = new_sem(buffer_pos, SIZE/4);
+buffer_pos += sizeof(sem);
+lock = new_mutex(buffer_pos);
+buffer_pos; += sizeof(mutex);
+canceled = buffer_pos;
+*canceled = 0;
+buffer_pos += sizeof(long);
+offset = buffer_pos;
+// start profile thread
+
+## kernel profile thread
+while(!*canceled) {
+  //read process data
+  down(empty);
+  lock(lock);
+  buffer++=jiffies;
+  buffer++=min;
+  buffer++=maj;
+  buffer=time;
+  if (buffer_pos == buffer_last)
+    buffer_pos = offset;
+  else
+    buffer_pos++;
+  buffer_pos = -1;
+  unlock(lock);
+  up(full);
+}
+
+## monitor init:
+buffer = mmap(...)
+buffer_first = buffer_pos;
+buffer_last = buffer_pos + SIZE;
+full = buffer;
+buffer_pos += sizeof(sem);
+empty = buffer;
+buffer_pos += sizeof(sem);
+lock = new_mutex(buffer_pos);
+buffer_pos += sizeof(mutex);
+canceled = buffer_pos;
+buffer_pos += sizeof(long);
+offset = buffer_pos;
+
+## monitor thread:
+//advance to where data starts
+lock_mutex(lock);
+while (buffer_pos == -1) {
+  buffer_pos++;
+  if (buffer_pos == buffer_last)
+    break;
+}
+unlock_mutex(lock);
+
+log_buf;
+done;
+while (true) {
+  down(full);
+  lock(lock);
+  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
+  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
+  log_buf[i++] = *buffer_pos; buffer_pos = -1; buffer_pos++;
+  log_buf[i++] = *buffer_pos; buffer_pos = -1;
+  if (buffer_pos == buffer_last)
+    buffer_pos = offset;
+  else
+    buffer_pos++;
+  done = *canceled && *buffer_pos == -1;
+  unlock(lock);
+  up(empty);
+  if (log_buf limit)
+     dump(log_buf);
+  if (done)
+    break;
+}
+
+This relies on the assumption that semaphores and mutexes can be shared by user and kernel mode. The semaphore
+functions called from user space would likely need to enter kernel space, i.e. it would likely have a different
+implementation than the kernel space version, but should act on the same memory region. The approach also
+requires frequent locking even though the buffer is quite large. Another issue is that the monitor thread blocks
+if the full buffer has been written, but the monitor has not read it. No data is lost, but the next profiling
+interval will be much larger, therefore information may be lost. Therefore, it may be desirable to instead
+continuously write into the circular buffer, possibly overwriting older profile values.
+
+A solution that relaxes the strict synchronization requirements and does not rely on shared synchronization
+primitives is as follows.
+
