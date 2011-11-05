@@ -75,4 +75,9 @@ while (true) {
 
 The assumption built into this solution is that the profiling thread will never be fast enough to wrap
 around the cyclic buffer to overwrite entries the monitor has not yet read. In particular, this means
-the monitor thread has to be started concurrently or shortly after the log thread.
+the monitor thread has to be started concurrently or shortly after the log thread. If it is possible to
+share a semaphore between user and kernel space, this problem could be prevented. The kernel would initialize
+the semaphore to the size of the buffer divided by 16 (bytes per profiling entry) and call 'down' from
+within the profiling thread after weaking up, before acquiring the mutex. The monitor thread would call
+'up' after reading a profiling entry. One downside of this approach is that although no data is lost, the
+log thread may block for a while and report a very coarse-grained profiling entry, so precision is lost.
