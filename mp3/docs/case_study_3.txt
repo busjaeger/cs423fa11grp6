@@ -7,7 +7,8 @@ mutex_t mutex;
 
 Note that in the simplest case, the mutex may be an integer initialized to 0 and both user and kernel
 space implement the lock and unlock functions using test-and-set instructions. Busy wait would be acceptable
-in the solution presented below, because lock contention minimal. It is also assumed that kernel and user
+in the solution presented below, because lock contention minimal. It may even be acceptable to avoid locking
+altogether if the three shared variables can be declared volatile. It is also assumed that kernel and user
 process define the constants SIZE (size of buffer) and OFFSET (length of shared structure) with the same
 values.
 
@@ -80,4 +81,5 @@ share a semaphore between user and kernel space, this problem could be prevented
 the semaphore to the size of the buffer divided by 16 (bytes per profiling entry) and call 'down' from
 within the profiling thread after weaking up, before acquiring the mutex. The monitor thread would call
 'up' after reading a profiling entry. One downside of this approach is that although no data is lost, the
-log thread may block for a while and report a very coarse-grained profiling entry, so precision is lost.
+log thread may block for a while and report a very coarse-grained profiling entry upon resuming, so
+precision is lost.
