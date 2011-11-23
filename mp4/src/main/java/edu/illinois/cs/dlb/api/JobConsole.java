@@ -8,6 +8,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 import edu.illinois.cs.dlb.Configuration;
+import edu.illinois.cs.dlb.Job.JobID;
 import edu.illinois.cs.dlb.JobClient;
 
 public class JobConsole {

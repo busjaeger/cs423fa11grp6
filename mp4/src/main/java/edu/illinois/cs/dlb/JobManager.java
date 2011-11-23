@@ -27,7 +27,7 @@ import com.healthmarketscience.rmiio.RemoteOutputStreamClient;
 import com.healthmarketscience.rmiio.SimpleRemoteInputStream;
 import com.healthmarketscience.rmiio.SimpleRemoteOutputStream;
 
-import edu.illinois.cs.dlb.api.JobID;
+import edu.illinois.cs.dlb.Job.JobID;
 
 public class JobManager implements JobClient, TaskManager {
 
@@ -37,7 +37,7 @@ public class JobManager implements JobClient, TaskManager {
         NF.setGroupingUsed(false);
     }
 
-    private final int id;
+    private final ID id;
     private final Registry registry;
     private final String peerURI;
     private final long splitSize;
@@ -45,7 +45,7 @@ public class JobManager implements JobClient, TaskManager {
     private final AtomicInteger counter; // TODO persist and resume
     private final Map<JobID, Job> jobs;
 
-    JobManager(int id, Registry registry, String peerURI, long splitSize, File dir) {
+    JobManager(ID id, Registry registry, String peerURI, long splitSize, File dir) {
         this.id = id;
         this.registry = registry;
         this.peerURI = peerURI;
@@ -218,11 +218,11 @@ public class JobManager implements JobClient, TaskManager {
 
     public static void main(String[] args) throws AlreadyBoundException, IOException {
         Configuration config = Configuration.load();
-        int id = config.getId();
+        ID id = new ID(config.getId());
 
         // create job manager dir
         File localDir = config.getLocalDir();
-        File dir = new File(localDir, Integer.toString(id));
+        File dir = new File(localDir, id.toString());
         if (!dir.isDirectory() && !dir.mkdirs())
             throw new IllegalArgumentException("Failed to create job manager directory: " + dir.toString());
 
@@ -230,7 +230,7 @@ public class JobManager implements JobClient, TaskManager {
         String registryHost = config.getRmiRegistryHost();
         int registryPort = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(registryHost, registryPort);
-        String uri = "/jobmanager/" + config.getId();
+        String uri = "/jobmanager/" + id;
         String peerUri = "/jobmanager/" + config.getPeerId();
         long splitSize = config.getSplitSize();
         JobClient manager = new JobManager(id, registry, peerUri, splitSize, dir);

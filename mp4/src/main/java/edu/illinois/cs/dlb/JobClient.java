@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.dlb.api.JobID;
+import edu.illinois.cs.dlb.Job.JobID;
 
 public interface JobClient extends Remote {
 

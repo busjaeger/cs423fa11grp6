@@ -3,9 +3,15 @@ package edu.illinois.cs.dlb;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.illinois.cs.dlb.api.JobID;
-
 public class Job {
+
+    public static class JobID extends ChildID<ID> {
+        private static final long serialVersionUID = -648883430189232695L;
+
+        public JobID(ID parentID, int value) {
+            super(parentID, value);
+        }
+    }
 
     private final JobID id;
     private final List<Task> tasks;
