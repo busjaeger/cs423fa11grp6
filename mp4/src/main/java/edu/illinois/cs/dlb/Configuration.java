@@ -17,25 +17,19 @@ public class Configuration {
 
     public static Configuration load() throws IOException {
         Properties config = new Properties();
-        InputStream is = JobManagerImpl.class.getClassLoader().getResourceAsStream("job-manager.properties");
+        InputStream is = JobManager.class.getClassLoader().getResourceAsStream("job-manager.properties");
         try {
             config.load(is);
         } finally {
             is.close();
         }
-        int id = Integer.parseInt(config.getProperty(ID));
-        if (id < 0)
-            throw new IllegalArgumentException("invalid " + ID + ": negative value");
-        long splitSize = Long.parseLong(config.getProperty(SPLIT_SIZE));
-        if (splitSize < 0)
-            throw new IllegalArgumentException("invalid " + SPLIT_SIZE + ": negative value");
+        int id = getPositiveInteger(config, ID);
+        long splitSize = getPositiveLong(config, SPLIT_SIZE);
         File localDir = new File(config.getProperty(LOCAL_DIR));
-        if (!localDir.isDirectory())
-            throw new IllegalArgumentException("invalid " + LOCAL_DIR + ": directory does not exist");
         int rmiPort = getPort(config, RMI_PORT);
         String rmiRegistryHost = getString(config, RMI_REGISTRY_HOST);
         int rmiRegistryPort = getPort(config, RMI_REGISTRY_PORT);
-        String peerId = getString(config, PEER_ID);
+        int peerId = getPositiveInteger(config, PEER_ID);
         return new Configuration(id, splitSize, localDir, rmiPort, rmiRegistryHost, rmiRegistryPort, peerId);
     }
 
@@ -53,13 +47,27 @@ public class Configuration {
         return s;
     }
 
+    private static int getPositiveInteger(Properties props, String name) {
+        int i = Integer.parseInt(props.getProperty(name));
+        if (i < 0)
+            throw new IllegalArgumentException("invalid " + name + ": negative value");
+        return i;
+    }
+
+    private static long getPositiveLong(Properties props, String name) {
+        long i = Long.parseLong(props.getProperty(name));
+        if (i < 0)
+            throw new IllegalArgumentException("invalid " + name + ": negative value");
+        return i;
+    }
+    
     private final int id;
     private final long splitSize;
     private final File localDir;
     private final int rmiPort;
     private final String rmiRegistryHost;
     private final int rmiRegistryPort;
-    private final String peerId;
+    private final int peerId;
 
     public Configuration(int id,
                          long splitSize,
@@ -67,7 +75,7 @@ public class Configuration {
                          int rmiPort,
                          String rmiRegistryHost,
                          int rmiRegistryPort,
-                         String peerId) {
+                         int peerId) {
         this.id = id;
         this.splitSize = splitSize;
         this.localDir = localDir;
@@ -101,7 +109,7 @@ public class Configuration {
         return rmiRegistryPort;
     }
 
-    public String getPeerId() {
+    public int getPeerId() {
         return peerId;
     }
 
