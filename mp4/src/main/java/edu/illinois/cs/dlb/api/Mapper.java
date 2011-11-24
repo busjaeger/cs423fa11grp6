@@ -6,13 +6,13 @@ import java.io.IOException;
  * @param <K>
  * @param <V>
  */
-public abstract class Mapper<K, V> {
+public abstract class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
 
     /**
      * @param <K>
      * @param <V>
      */
-    public interface Context<K, V> {
+    public static interface Context<K, V> {
         void write(K key, V value) throws IOException;
     }
 
@@ -22,6 +22,6 @@ public abstract class Mapper<K, V> {
      * @param context
      * @throws IOException
      */
-    public abstract void map(K key, V value, Context<K, V> context) throws IOException;
+    public abstract void map(KEYIN key, VALUEIN value, Context<KEYOUT, VALUEOUT> context) throws IOException;
 
 }

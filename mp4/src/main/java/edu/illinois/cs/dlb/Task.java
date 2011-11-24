@@ -24,9 +24,9 @@ public class Task implements Serializable {
     private final Path inputFile;
     private final Path outputFile;
     private final Path jar;
-    private final JobDescriptor descriptor;
+    private final JarDescriptor descriptor;
 
-    public Task(TaskID id, boolean remote, Path inputFile, Path outputFile, Path jar, JobDescriptor descriptor) {
+    public Task(TaskID id, boolean remote, Path inputFile, Path outputFile, Path jar, JarDescriptor descriptor) {
         this.id = id;
         this.status = new TaskStatus(id);
         this.remote = remote;
@@ -60,7 +60,7 @@ public class Task implements Serializable {
         return jar;
     }
 
-    public JobDescriptor getDescriptor() {
+    public JarDescriptor getDescriptor() {
         return descriptor;
     }
 

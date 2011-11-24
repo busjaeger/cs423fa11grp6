@@ -91,7 +91,7 @@ public class WorkManager implements JobManager, TaskManager {
         JobID jobId = new JobID(id, counter.incrementAndGet());
         Path jobPath = path(jobId);
         Path jar = jobPath.append(jarFile.getName());
-        JobDescriptor descriptor = JobDescriptor.read(jarFile);
+        JarDescriptor descriptor = JarDescriptor.read(jarFile);
         Job job = new Job(jobId, jar, descriptor);
         jobs.put(jobId, job);
 

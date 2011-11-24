@@ -23,10 +23,10 @@ public class Job implements Serializable {
     private final JobID id;
     private final JobStatus status;
     private final Path jar;
-    private final JobDescriptor descriptor;
+    private final JarDescriptor descriptor;
     private final List<Task> tasks;
 
-    public Job(JobID id, Path jar, JobDescriptor descriptor) {
+    public Job(JobID id, Path jar, JarDescriptor descriptor) {
         this.id = id;
         this.jar = jar;
         this.descriptor = descriptor;
@@ -46,7 +46,7 @@ public class Job implements Serializable {
         return jar;
     }
 
-    public JobDescriptor getDescriptor() {
+    public JarDescriptor getDescriptor() {
         return descriptor;
     }
 
