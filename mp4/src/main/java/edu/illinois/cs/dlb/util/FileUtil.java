@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.dlb.util;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,7 +32,7 @@ public final class FileUtil {
 
     /**
      * Ensures parent directories exist and opens an output stream.
-     *
+     * 
      * @param file
      * @return
      * @throws IOException
@@ -44,7 +44,7 @@ public final class FileUtil {
 
     /**
      * Writes the given input stream to the file.
-     *
+     * 
      * @param file
      * @param is
      * @throws IOException

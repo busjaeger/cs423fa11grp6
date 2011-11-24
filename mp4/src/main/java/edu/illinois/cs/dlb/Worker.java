@@ -3,12 +3,13 @@ package edu.illinois.cs.dlb;
 import java.io.File;
 
 import edu.illinois.cs.dlb.TaskStatus.Status;
+import edu.illinois.cs.dlb.util.FileUtil;
 
 class Worker implements Runnable {
 
-    private final JobManager jobManager;
+    private final WorkManager jobManager;
 
-    Worker(JobManager jobManager) {
+    Worker(WorkManager jobManager) {
         this.jobManager = jobManager;
     }
 
@@ -25,17 +26,17 @@ class Worker implements Runnable {
             System.out.println("Starting Task "+task.getId());
             // simulate for now
             try {
-                File input = jobManager.getFile(task.getInputSplit());
-                File output = jobManager.getFile(task.getOutputSplit());
+                File input = jobManager.getFile(task.getInputFile());
+                File output = jobManager.getFile(task.getOutputFile());
                 System.out.println("writing to: "+output.getAbsolutePath());
                 FileUtil.copy(output, input);
-                task.getTaskStatus().setStatus(Status.SUCCEEDED);
+                task.getStatus().setStatus(Status.SUCCEEDED);
             } catch (Throwable t) {
-                task.getTaskStatus().setStatus(Status.FAILED);
+                task.getStatus().setStatus(Status.FAILED);
                 if (t instanceof Error)
                     throw (Error)t;
                 t.printStackTrace();
-                task.getTaskStatus().setMessage(t.getMessage());
+                task.getStatus().setMessage(t.getMessage());
             }
         }
     }

@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?><launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
-<listEntry value="/mp4/src/main/java/edu/illinois/cs/dlb/JobManager.java"/>
+<listEntry value="/mp4/src/main/java/edu/illinois/cs/dlb/WorkManager.java"/>
 </listAttribute>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
 <listEntry value="1"/>
 </listAttribute>
-<mapAttribute key="org.eclipse.debug.core.preferred_launchers"/>
-<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.dlb.JobManager"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="-config ${project_loc:/mp4}/src/test/resources/sample/job-manager-1.properties"/>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.dlb.WorkManager"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="-config ${project_loc:/mp4}/src/test/resources/sample/job-manager-2.properties"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="mp4"/>
 </launchConfiguration>

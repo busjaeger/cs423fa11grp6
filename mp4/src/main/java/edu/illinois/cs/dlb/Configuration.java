@@ -17,7 +17,7 @@ public class Configuration {
     private static final String PEER_ID = "peer.id";
 
     public static Configuration load() throws IOException {
-        URL url = JobManager.class.getClassLoader().getResource("job-manager-default.properties");
+        URL url = WorkManager.class.getClassLoader().getResource("job-manager-default.properties");
         return load(url);
     }
 

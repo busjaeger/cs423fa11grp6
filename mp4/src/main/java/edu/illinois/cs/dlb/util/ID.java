@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.dlb.util;
 
 import java.io.Serializable;
 

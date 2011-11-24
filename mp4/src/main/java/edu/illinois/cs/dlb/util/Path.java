@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.dlb.util;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -6,11 +6,11 @@ import java.util.Collections;
 
 public class Path implements Serializable {
 
-    public static Path path(String...segments) {
+    public static Path path(String... segments) {
         return new Path(segments);
     }
 
-    public static Path path(Object...segments) {
+    public static Path path(Object... segments) {
         return new Path(segments);
     }
 
@@ -38,7 +38,7 @@ public class Path implements Serializable {
     }
 
     public String last() {
-        return segments[segments.length-1];
+        return segments[segments.length - 1];
     }
 
     public Path beforeLast() {

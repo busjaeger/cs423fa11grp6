@@ -9,7 +9,7 @@ import java.rmi.registry.Registry;
 
 import edu.illinois.cs.dlb.Configuration;
 import edu.illinois.cs.dlb.Job.JobID;
-import edu.illinois.cs.dlb.JobClient;
+import edu.illinois.cs.dlb.JobManager;
 
 public class JobConsole {
 
@@ -59,19 +59,19 @@ public class JobConsole {
                     config = Configuration.load(new File(args[4]));
                 else
                     config = Configuration.load();
-                JobClient jobClient = getStub(config);
+                JobManager jobClient = getStub(config);
                 JobID id = jobClient.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id);
                 break;
         }
     }
 
-    private static JobClient getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
+    private static JobManager getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
         String host = config.getRmiRegistryHost();
         int port = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(host, port);
         String path = "/jobmanager/" + config.getId();
-        return (JobClient)registry.lookup(path);
+        return (JobManager)registry.lookup(path);
     }
 
     private static void printUsage() {

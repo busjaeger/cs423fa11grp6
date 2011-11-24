@@ -4,6 +4,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+import edu.illinois.cs.dlb.util.ChildID;
+import edu.illinois.cs.dlb.util.ID;
+import edu.illinois.cs.dlb.util.Path;
+
 public class Job implements Serializable {
 
     private static final long serialVersionUID = 5073561871061802007L;
