@@ -52,7 +52,7 @@ public class WorkManager implements JobManager, TaskManager {
 
     private final ID id;
     private final Registry registry;
-    private final String peerURI;
+    private final String remoteURI;
     private final long splitSize;
     private final File dir;
     private final AtomicInteger counter; // TODO persist and resume
@@ -60,10 +60,10 @@ public class WorkManager implements JobManager, TaskManager {
     private final Collection<Task> remoteTasks;
     private final BlockingQueue<Task> taskQueue;
 
-    WorkManager(ID id, Registry registry, String peerURI, long splitSize, File dir) {
+    WorkManager(ID id, Registry registry, String remoteURI, long splitSize, File dir) {
         this.id = id;
         this.registry = registry;
-        this.peerURI = peerURI;
+        this.remoteURI = remoteURI;
         this.splitSize = splitSize;
         this.dir = dir;
         this.counter = new AtomicInteger(0);
@@ -202,18 +202,28 @@ public class WorkManager implements JobManager, TaskManager {
 
     public void submitTaskRemote(Task task) throws RemoteException {
         task.getStatus().setStatus(Status.TRANSFERRING);
-        getPeer().submitTask(task);
+        getRemote().submitTask(task);
     }
 
     public void submitTaskLocal(Task task) {
         task.getStatus().setStatus(Status.WAITING);
         taskQueue.add(task);
     }
-    
+
     @Override
     public RemoteOutputStream open(Path path) throws IOException {
         OutputStream os = openLocal(path);
         return new SimpleRemoteOutputStream(os).export();
+    }
+
+    private OutputStream openLocal(Path path) throws IOException {
+        File file = getFile(path);
+        return FileUtil.open(file);
+    }
+
+    private OutputStream openRemote(Path path) throws RemoteException, IOException {
+        RemoteOutputStream ros = getRemote().open(path);
+        return RemoteOutputStreamClient.wrap(ros);
     }
 
     @Override
@@ -236,25 +246,15 @@ public class WorkManager implements JobManager, TaskManager {
         FileInputStream is = new FileInputStream(file);
         try {
             RemoteInputStream ris = new SimpleRemoteInputStream(is).export();
-            getPeer().write(path, ris);
+            getRemote().write(path, ris);
         } finally {
             is.close();
         }
     }
 
-    private OutputStream openLocal(Path path) throws IOException {
-        File file = getFile(path);
-        return FileUtil.open(file);
-    }
-
-    private OutputStream openRemote(Path path) throws RemoteException, IOException {
-        RemoteOutputStream ros = getPeer().open(path);
-        return RemoteOutputStreamClient.wrap(ros);
-    }
-
-    private TaskManager getPeer() {
+    private TaskManager getRemote() {
         try {
-            return (TaskManager)registry.lookup(peerURI);
+            return (TaskManager)registry.lookup(remoteURI);
         } catch (RemoteException e) {
             throw new RuntimeException(e);
         } catch (NotBoundException e) {
@@ -281,9 +281,9 @@ public class WorkManager implements JobManager, TaskManager {
         String registryHost = config.getRmiRegistryHost();
         int registryPort = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(registryHost, registryPort);
-        String peerUri = "/jobmanager/" + config.getPeerId();
+        String remoteURI = "/jobmanager/" + config.getPeerId();
         long splitSize = config.getSplitSize();
-        JobManager manager = new WorkManager(id, registry, peerUri, splitSize, dir);
+        JobManager manager = new WorkManager(id, registry, remoteURI, splitSize, dir);
 
         // start worker
         Worker worker = new Worker((WorkManager)manager);

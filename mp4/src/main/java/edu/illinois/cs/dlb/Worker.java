@@ -7,10 +7,10 @@ import edu.illinois.cs.dlb.util.FileUtil;
 
 class Worker implements Runnable {
 
-    private final WorkManager jobManager;
+    private final WorkManager workManager;
 
-    Worker(WorkManager jobManager) {
-        this.jobManager = jobManager;
+    Worker(WorkManager workManager) {
+        this.workManager = workManager;
     }
 
     @Override
@@ -18,17 +18,15 @@ class Worker implements Runnable {
         while (true) {
             Task task;
             try {
-                task = jobManager.getTaskQueue().take();
+                task = workManager.getTaskQueue().take();
             } catch (InterruptedException e) {
                 return;
             }
 
-            System.out.println("Starting Task "+task.getId());
             // simulate for now
             try {
-                File input = jobManager.getFile(task.getInputFile());
-                File output = jobManager.getFile(task.getOutputFile());
-                System.out.println("writing to: "+output.getAbsolutePath());
+                File input = workManager.getFile(task.getInputFile());
+                File output = workManager.getFile(task.getOutputFile());
                 FileUtil.copy(output, input);
                 task.getStatus().setStatus(Status.SUCCEEDED);
             } catch (Throwable t) {
