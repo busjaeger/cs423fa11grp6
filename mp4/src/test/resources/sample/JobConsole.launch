@@ -6,6 +6,6 @@
 <listEntry value="1"/>
 </listAttribute>
 <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.dlb.api.JobConsole"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="submit-job ${project_loc:mp4}/pom.xml ${project_loc:mp4}/src/test/resources/sample/rfc2616.txt bla"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="submit-job ${project_loc:mp4}/src/test/resources/sample/job.jar ${project_loc:mp4}/src/test/resources/sample/rfc2616.txt"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="mp4"/>
 </launchConfiguration>

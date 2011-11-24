@@ -11,18 +11,18 @@ public class JobDescriptor implements Serializable {
 
     private static final long serialVersionUID = 2403104226863768716L;
 
-    public static JobDescriptor readFromJar(File jobFile) throws IOException {
+    public static JobDescriptor read(File jobFile) throws IOException {
         JarFile jar = new JarFile(jobFile);
         try {
             Manifest manifest = jar.getManifest();
-            return JobDescriptor.readFromManifest(manifest);
+            return JobDescriptor.read(manifest);
         } finally {
             jar.close();
         }
     }
 
     // TODO Validate
-    public static JobDescriptor readFromManifest(Manifest manifest) {
+    public static JobDescriptor read(Manifest manifest) {
         Attributes attrs = manifest.getMainAttributes();
         String mapperClass = attrs.getValue("MapperClass");
         String inputKeyClass = attrs.getValue("InputKeyClass");

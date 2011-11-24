@@ -13,4 +13,6 @@ public interface TaskManager extends Remote {
 
     void write(Path to, RemoteInputStream from) throws RemoteException, IOException;
 
+    void submitTask(Task task) throws RemoteException;
+
 }

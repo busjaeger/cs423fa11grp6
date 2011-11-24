@@ -9,8 +9,6 @@ import edu.illinois.cs.dlb.Job.JobID;
 
 public interface JobClient extends Remote {
 
-    JobID submitJob(File jarFile, File inputFile, File outputFile) throws IOException, RemoteException;
-
-    void deleteJob(JobID jobId) throws IOException, RemoteException;
+    JobID submitJob(File jarFile, File inputFile) throws IOException, RemoteException;
 
 }

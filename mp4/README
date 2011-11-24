@@ -1,15 +1,14 @@
 Run the sample:
 
-1. build the project with maven
+1. copy dependencies
  - open a new shell
  - cd mp4
- - mvn install
  - mvn dependency:copy-dependencies
 
 2. start RMI registry
  - open a new shell
  - cd mp4
- - CLASSPATH=CLASSPATH=target/dependency/commons-logging-1.0.4.jar:target/dependency/rmiio-2.0.2.jar:target/mp4-1.0-SNAPSHOT.jar rmiregistry
+ - CLASSPATH=CLASSPATH=target/dependency/commons-logging-1.0.4.jar:target/dependency/rmiio-2.0.2.jar:target/classes/ rmiregistry
 
 3. start two nodes
  - open eclipse

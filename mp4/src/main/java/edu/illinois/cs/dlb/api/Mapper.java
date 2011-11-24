@@ -22,6 +22,6 @@ public abstract class Mapper<K, V> {
      * @param context
      * @throws IOException
      */
-    abstract void map(K key, V value, Context<K, V> context) throws IOException;
+    public abstract void map(K key, V value, Context<K, V> context) throws IOException;
 
 }

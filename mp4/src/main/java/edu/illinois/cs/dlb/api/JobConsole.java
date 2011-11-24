@@ -47,21 +47,20 @@ public class JobConsole {
 
         switch (cmd) {
             case SUBMIT_JOB:
-                if (args.length < 4) {
+                if (args.length < 3) {
                     System.out.println("invalid arguments to " + Command.SUBMIT_JOB + " command");
                     printUsage();
                     System.exit(1);
                 }
                 File jobJarFile = new File(args[1]);
                 File inputFile = new File(args[2]);
-                File outputFile = new File(args[3]);
                 Configuration config;
-                if (args.length > 5 && args[4].equals("-config"))
-                    config = Configuration.load(new File(args[5]));
+                if (args.length > 4 && args[3].equals("-config"))
+                    config = Configuration.load(new File(args[4]));
                 else
                     config = Configuration.load();
                 JobClient jobClient = getStub(config);
-                JobID id = jobClient.submitJob(jobJarFile, inputFile, outputFile);
+                JobID id = jobClient.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id);
                 break;
         }
@@ -77,6 +76,6 @@ public class JobConsole {
 
     private static void printUsage() {
         System.out.println("usage:");
-        System.out.println("submit-job {job-jar-file} {input-file-path} {output-file-path}");
+        System.out.println("submit-job {job-jar-file} {input-file-path}");
     }
 }

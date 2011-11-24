@@ -16,8 +16,13 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.healthmarketscience.rmiio.RemoteInputStream;
@@ -28,7 +33,12 @@ import com.healthmarketscience.rmiio.SimpleRemoteInputStream;
 import com.healthmarketscience.rmiio.SimpleRemoteOutputStream;
 
 import edu.illinois.cs.dlb.Job.JobID;
+import edu.illinois.cs.dlb.Task.TaskID;
+import edu.illinois.cs.dlb.TaskStatus.Status;
 
+/**
+ * TODO recover from common failures
+ */
 public class JobManager implements JobClient, TaskManager {
 
     private static final NumberFormat NF = NumberFormat.getInstance();
@@ -44,6 +54,8 @@ public class JobManager implements JobClient, TaskManager {
     private final File dir;
     private final AtomicInteger counter; // TODO persist and resume
     private final Map<JobID, Job> jobs;
+    private final Collection<Task> remoteTasks;
+    private final BlockingQueue<Task> taskQueue;
 
     JobManager(ID id, Registry registry, String peerURI, long splitSize, File dir) {
         this.id = id;
@@ -53,23 +65,36 @@ public class JobManager implements JobClient, TaskManager {
         this.dir = dir;
         this.counter = new AtomicInteger(0);
         this.jobs = new ConcurrentHashMap<JobID, Job>();
+        this.taskQueue = new LinkedBlockingQueue<Task>();
+        this.remoteTasks = Collections.synchronizedList(new ArrayList<Task>());
+    }
+
+    BlockingQueue<Task> getTaskQueue() {
+        return taskQueue;
+    }
+
+    public File getFile(Path path) {
+        File file = dir;
+        for (String segment : path.segments())
+            file = new File(file, segment);
+        return file;
     }
 
     @Override
-    public JobID submitJob(File jobFile, File inputFile, File outputFile) throws IOException {
+    public JobID submitJob(File jarFile, File inputFile) throws IOException {
         // bootstrap phase
 
         // 1. create job
         JobID jobId = new JobID(id, counter.incrementAndGet());
-        Job job = new Job(jobId);
+        Path jobPath = path(jobId);
+        Path jar = jobPath.append(jarFile.getName());
+        JobDescriptor descriptor = JobDescriptor.read(jarFile);
+        Job job = new Job(jobId, jar, descriptor);
         jobs.put(jobId, job);
 
         // 2. distribute job file across cluster
-        Path jobPath = path(jobId);
-        Path jobFilePath = jobPath.append(jobFile.getName());
-        writeLocal(jobFilePath, jobFile);
-        writeRemote(jobFilePath, jobFile);
-        // JobDescriptor jobDescriptor = readJobDescriptor(jobFile);
+        writeLocal(jar, jarFile);
+        writeRemote(jar, jarFile);
 
         /*
          * 3. compute tasks this is to get us started. Several decisions
@@ -77,8 +102,9 @@ public class JobManager implements JobClient, TaskManager {
          * test file, split at first line feed after split size), how to
          * distribute splits across nodes (round-robin)
          */
-        Path inputPath = jobPath.append("input");
-        createTasks(inputPath, inputFile);
+        Path inputDir = jobPath.append("input");
+        Path outputDir = jobPath.append("output");
+        submitTasks(job, inputDir, outputDir, inputFile);
 
         return jobId;
     }
@@ -88,26 +114,38 @@ public class JobManager implements JobClient, TaskManager {
      * each file. The current algorithm is hard-coded to spread the splits
      * evenly across the two machines.
      * 
-     * @param inputSplits
+     * @param job
      * @param inputFile
      * @throws FileNotFoundException
      * @throws IOException
      * @throws RemoteException
      */
-    private void createTasks(Path inputPath, File inputFile) throws IOException, RemoteException {
+    private void submitTasks(Job job, Path inputDir, Path outputDir, File inputFile) throws IOException,
+        RemoteException {
         InputStream is = new FileInputStream(inputFile);
         try {
             int num = 0;
+            boolean eof;
             while (true) {
-                Path split = inputPath.append("split-" + NF.format(num));
-                OutputStream os = num % 2 == 0 ? openLocal(split) : openRemote(split);
+                String split = "split-" + NF.format(num);
+                Path input = inputDir.append(split);
+                Path output = outputDir.append(split);
+                boolean remote = num % 2 == 1; // hard coded policy
+                OutputStream os = remote ? openRemote(input) : openLocal(input);
                 try {
-                    // TODO create tasks
-                    if (writeLineSplit(is, os) == -1)
-                        break;
+                    eof = writeLineSplit(is, os) == -1;
+                    TaskID id = new TaskID(job.getId(), num);
+                    Task task = new Task(id, remote, input, output, job.getJar(), job.getDescriptor());
+                    job.getTasks().add(task);
+                    if (remote)
+                        submitTaskRemote(task);
+                    else
+                        submitTaskLocal(task);
                 } finally {
                     os.close();
                 }
+                if (eof)
+                    break;
                 num++;
             }
         } finally {
@@ -154,10 +192,21 @@ public class JobManager implements JobClient, TaskManager {
     }
 
     @Override
-    public void deleteJob(JobID jobId) {
-        throw new UnsupportedOperationException("TODO deleteJob");
+    public void submitTask(Task task) throws RemoteException {
+        remoteTasks.add(task);
+        submitTaskLocal(task);
     }
 
+    public void submitTaskRemote(Task task) throws RemoteException {
+        task.getTaskStatus().setStatus(Status.TRANSFERRING);
+        getPeer().submitTask(task);
+    }
+
+    public void submitTaskLocal(Task task) {
+        task.getTaskStatus().setStatus(Status.WAITING);
+        taskQueue.add(task);
+    }
+    
     @Override
     public RemoteOutputStream open(Path path) throws IOException {
         OutputStream os = openLocal(path);
@@ -166,7 +215,7 @@ public class JobManager implements JobClient, TaskManager {
 
     @Override
     public void write(Path path, RemoteInputStream ris) throws RemoteException, IOException {
-        File file = getFile(dir, path);
+        File file = getFile(path);
         InputStream is = RemoteInputStreamClient.wrap(ris);
         try {
             FileUtil.write(file, is);
@@ -176,7 +225,7 @@ public class JobManager implements JobClient, TaskManager {
     }
 
     private void writeLocal(Path path, File file) throws IOException {
-        File dest = getFile(dir, path);
+        File dest = getFile(path);
         FileUtil.copy(dest, file);
     }
 
@@ -191,7 +240,7 @@ public class JobManager implements JobClient, TaskManager {
     }
 
     private OutputStream openLocal(Path path) throws IOException {
-        File file = getFile(dir, path);
+        File file = getFile(path);
         return FileUtil.open(file);
     }
 
@@ -210,38 +259,37 @@ public class JobManager implements JobClient, TaskManager {
         }
     }
 
-    private static File getFile(File dir, Path path) {
-        for (String segment : path.segments())
-            dir = new File(dir, segment);
-        return dir;
-    }
-
     public static void main(String[] args) throws AlreadyBoundException, IOException {
+        // TODO better command parsing
         Configuration config;
-        if (args.length > 1 && args[0].equals("-config")) //TODO better command parsing
+        if (args.length > 1 && args[0].equals("-config"))
             config = Configuration.load(new File(args[1]));
         else
             config = Configuration.load();
 
-        ID id = new ID(config.getId());
-
         // create job manager dir
+        ID id = new ID(config.getId());
         File localDir = config.getLocalDir();
         File dir = new File(localDir, id.toString());
         if (!dir.isDirectory() && !dir.mkdirs())
             throw new IllegalArgumentException("Failed to create job manager directory: " + dir.toString());
 
-        // register service
+        // create job manager
         String registryHost = config.getRmiRegistryHost();
         int registryPort = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(registryHost, registryPort);
-        String uri = "/jobmanager/" + id;
         String peerUri = "/jobmanager/" + config.getPeerId();
         long splitSize = config.getSplitSize();
         JobClient manager = new JobManager(id, registry, peerUri, splitSize, dir);
+
+        // start worker
+        Worker worker = new Worker((JobManager)manager);
+        new Thread(worker).start();
+
+        // register job manager
         int rmiPort = config.getRmiPort();
         Remote stub = UnicastRemoteObject.exportObject(manager, rmiPort);
-
+        String uri = "/jobmanager/" + id;
         registry.rebind(uri, stub);
 
         System.out.println("JobManager started on port " + rmiPort);
