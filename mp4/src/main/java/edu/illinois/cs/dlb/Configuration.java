@@ -3,6 +3,8 @@ package edu.illinois.cs.dlb;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Properties;
 
 public class Configuration {
@@ -16,20 +18,33 @@ public class Configuration {
     private static final String PEER_ID = "peer.id";
 
     public static Configuration load() throws IOException {
+        URL url = JobManager.class.getClassLoader().getResource("job-manager-default.properties");
+        return load(url);
+    }
+
+    public static Configuration load(File file) throws IOException {
+        return load(file.toURI().toURL());
+    }
+
+    public static Configuration load(URL url) throws IOException {
         Properties config = new Properties();
-        InputStream is = JobManager.class.getClassLoader().getResourceAsStream("job-manager.properties");
+        InputStream is = url.openStream();
         try {
             config.load(is);
         } finally {
             is.close();
         }
-        int id = getPositiveInteger(config, ID);
-        long splitSize = getPositiveLong(config, SPLIT_SIZE);
-        File localDir = new File(config.getProperty(LOCAL_DIR));
-        int rmiPort = getPort(config, RMI_PORT);
-        String rmiRegistryHost = getString(config, RMI_REGISTRY_HOST);
-        int rmiRegistryPort = getPort(config, RMI_REGISTRY_PORT);
-        int peerId = getPositiveInteger(config, PEER_ID);
+        return load(config);
+    }
+
+    public static Configuration load(Properties props) {
+        int id = getPositiveInteger(props, ID);
+        long splitSize = getPositiveLong(props, SPLIT_SIZE);
+        File localDir = new File(props.getProperty(LOCAL_DIR));
+        int rmiPort = getPort(props, RMI_PORT);
+        String rmiRegistryHost = getString(props, RMI_REGISTRY_HOST);
+        int rmiRegistryPort = getPort(props, RMI_REGISTRY_PORT);
+        int peerId = getPositiveInteger(props, PEER_ID);
         return new Configuration(id, splitSize, localDir, rmiPort, rmiRegistryHost, rmiRegistryPort, peerId);
     }
 
@@ -60,7 +75,7 @@ public class Configuration {
             throw new IllegalArgumentException("invalid " + name + ": negative value");
         return i;
     }
-    
+
     private final int id;
     private final long splitSize;
     private final File localDir;

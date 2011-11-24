@@ -1,0 +1,23 @@
+Run the sample:
+
+1. build the project with maven
+ - open a new shell
+ - cd mp4
+ - mvn install
+ - mvn dependency:copy-dependencies
+
+2. start RMI registry
+ - open a new shell
+ - cd mp4
+ - CLASSPATH=CLASSPATH=target/dependency/commons-logging-1.0.4.jar:target/dependency/rmiio-2.0.2.jar:target/mp4-1.0-SNAPSHOT.jar rmiregistry
+
+3. start two nodes
+ - open eclipse
+ - import launch configurations: File > Import... > Run/Debug > Launch Configurations
+ - browse to src/test/resources/sample
+ - select all three (JobManager1.launch, JobManager2.launch, JobConsole.launch)
+ - launch the two JobManager launch configs
+
+4. run sample app
+ - run JobConsole launch config
+ - to verify that splits were copied check /tmp/jobmanager

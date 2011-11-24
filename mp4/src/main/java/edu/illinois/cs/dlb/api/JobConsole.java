@@ -45,10 +45,9 @@ public class JobConsole {
             System.exit(1);
         }
 
-        JobClient jobClient = getStub();
         switch (cmd) {
             case SUBMIT_JOB:
-                if (args.length != 4) {
+                if (args.length < 4) {
                     System.out.println("invalid arguments to " + Command.SUBMIT_JOB + " command");
                     printUsage();
                     System.exit(1);
@@ -56,14 +55,19 @@ public class JobConsole {
                 File jobJarFile = new File(args[1]);
                 File inputFile = new File(args[2]);
                 File outputFile = new File(args[3]);
+                Configuration config;
+                if (args.length > 5 && args[4].equals("-config"))
+                    config = Configuration.load(new File(args[5]));
+                else
+                    config = Configuration.load();
+                JobClient jobClient = getStub(config);
                 JobID id = jobClient.submitJob(jobJarFile, inputFile, outputFile);
-                System.out.println("Job submitted. ID: "+id);
+                System.out.println("Job submitted. ID: " + id);
                 break;
         }
     }
 
-    private static JobClient getStub() throws NotBoundException, RemoteException, IOException {
-        Configuration config = Configuration.load();
+    private static JobClient getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
         String host = config.getRmiRegistryHost();
         int port = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(host, port);

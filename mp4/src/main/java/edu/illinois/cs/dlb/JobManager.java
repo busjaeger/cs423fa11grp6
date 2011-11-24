@@ -217,7 +217,12 @@ public class JobManager implements JobClient, TaskManager {
     }
 
     public static void main(String[] args) throws AlreadyBoundException, IOException {
-        Configuration config = Configuration.load();
+        Configuration config;
+        if (args.length > 1 && args[0].equals("-config")) //TODO better command parsing
+            config = Configuration.load(new File(args[1]));
+        else
+            config = Configuration.load();
+
         ID id = new ID(config.getId());
 
         // create job manager dir
