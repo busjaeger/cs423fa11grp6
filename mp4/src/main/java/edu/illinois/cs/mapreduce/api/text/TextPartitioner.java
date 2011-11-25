@@ -42,6 +42,7 @@ public class TextPartitioner extends Partitioner {
             writer.write('\n');
             lineNumber++;
         }
+        writer.flush();
         return partition;
     }
 

@@ -98,7 +98,6 @@ public class JobManager implements RemoteJobManager {
                 // current selection policy: robin.
                 // TODO: try capacity-based policy here
                 ID nodeId = nodeIds[num % nodeIds.length];
-                System.out.println(nodeId);
 
                 // 2. initialize partition paths
                 String partitionPath = "partition-" + NF.format(num);
@@ -154,9 +153,9 @@ public class JobManager implements RemoteJobManager {
         ID id = new ID(config.getId());
 
         // file systems
-        File dir = new File(config.getLocalDir(), id.toString());
-        FileUtil.ensureDirExists(dir);
-        FileSystem localFS = new LocalFileSystem(dir);
+        File localDir = config.getLocalDir();
+        FileUtil.ensureDirExists(localDir);
+        FileSystem localFS = new LocalFileSystem(new File(localDir, id.toString()));
         RemoteFileSystem rfs = new RemoteFileSystemAdapter(localFS);
 
         ID peerId = new ID(config.getPeerId());
