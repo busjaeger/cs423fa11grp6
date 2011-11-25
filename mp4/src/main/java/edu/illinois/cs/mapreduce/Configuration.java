@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,7 +17,7 @@ public class Configuration {
     private static final String PEER_ID = "peer.id";
 
     public static Configuration load() throws IOException {
-        URL url = WorkManager.class.getClassLoader().getResource("job-manager-default.properties");
+        URL url = JobManager.class.getClassLoader().getResource("job-manager-default.properties");
         return load(url);
     }
 

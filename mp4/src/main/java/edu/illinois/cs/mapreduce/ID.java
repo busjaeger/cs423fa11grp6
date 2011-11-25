@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb.util;
+package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 

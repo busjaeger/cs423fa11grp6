@@ -3,7 +3,7 @@ package sample;
 import java.io.IOException;
 import java.util.StringTokenizer;
 
-import edu.illinois.cs.dlb.api.Mapper;
+import edu.illinois.cs.mapreduce.api.Mapper;
 
 public class WordCountMapper extends Mapper<Long, String, String, Long> {
 

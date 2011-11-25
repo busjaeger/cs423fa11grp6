@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb.api;
+package edu.illinois.cs.mapreduce.api;
 
 import java.io.File;
 import java.io.IOException;
@@ -7,9 +7,9 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-import edu.illinois.cs.dlb.Configuration;
-import edu.illinois.cs.dlb.Job.JobID;
-import edu.illinois.cs.dlb.JobManager;
+import edu.illinois.cs.mapreduce.Configuration;
+import edu.illinois.cs.mapreduce.RemoteJobManager;
+import edu.illinois.cs.mapreduce.Job.JobID;
 
 public class JobConsole {
 
@@ -59,19 +59,19 @@ public class JobConsole {
                     config = Configuration.load(new File(args[4]));
                 else
                     config = Configuration.load();
-                JobManager jobClient = getStub(config);
+                RemoteJobManager jobClient = getStub(config);
                 JobID id = jobClient.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id);
                 break;
         }
     }
 
-    private static JobManager getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
+    private static RemoteJobManager getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
         String host = config.getRmiRegistryHost();
         int port = config.getRmiRegistryPort();
         Registry registry = LocateRegistry.getRegistry(host, port);
-        String path = "/jobmanager/" + config.getId();
-        return (JobManager)registry.lookup(path);
+        String path = "/"+config.getId()+"/job-manager";
+        return (RemoteJobManager)registry.lookup(path);
     }
 
     private static void printUsage() {

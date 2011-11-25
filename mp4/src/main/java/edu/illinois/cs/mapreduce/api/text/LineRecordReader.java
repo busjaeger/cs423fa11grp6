@@ -1,12 +1,11 @@
-package edu.illinois.cs.dlb.api.lib;
+package edu.illinois.cs.mapreduce.api.text;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 
-import edu.illinois.cs.dlb.api.RecordReader;
+import edu.illinois.cs.mapreduce.api.RecordReader;
 
 public class LineRecordReader extends RecordReader<Long, String> {
 
@@ -14,8 +13,8 @@ public class LineRecordReader extends RecordReader<Long, String> {
     private long lineNumber;
     private String line;
 
-    public LineRecordReader(File file, long firstLineNumber) throws FileNotFoundException {
-        this(new BufferedReader(new FileReader(file)), firstLineNumber);
+    public LineRecordReader(InputStream is, long firstLineNumber) {
+        this(new BufferedReader(new InputStreamReader(is)), firstLineNumber);
     }
 
     public LineRecordReader(BufferedReader reader, long firstLineNumber) {

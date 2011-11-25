@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb.util;
+package edu.illinois.cs.dfs;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -24,9 +24,26 @@ public final class FileUtil {
     public static void copy(File dest, File src) throws IOException {
         FileInputStream is = new FileInputStream(src);
         try {
-            write(dest, is);
+            copy(dest, is);
         } finally {
             is.close();
+        }
+    }
+
+    /**
+     * Writes the given input stream to the file.
+     * 
+     * @param file
+     * @param is
+     * @throws IOException
+     */
+    public static void copy(File file, InputStream is) throws IOException {
+        ensureDirExists(file.getParentFile());
+        FileOutputStream os = new FileOutputStream(file);
+        try {
+            transfer(is, os);
+        } finally {
+            os.close();
         }
     }
 
@@ -37,26 +54,9 @@ public final class FileUtil {
      * @return
      * @throws IOException
      */
-    public static OutputStream open(File file) throws IOException {
+    public static OutputStream write(File file) throws IOException {
         ensureDirExists(file.getParentFile());
         return new FileOutputStream(file);
-    }
-
-    /**
-     * Writes the given input stream to the file.
-     * 
-     * @param file
-     * @param is
-     * @throws IOException
-     */
-    public static void write(File file, InputStream is) throws IOException {
-        ensureDirExists(file.getParentFile());
-        FileOutputStream os = new FileOutputStream(file);
-        try {
-            transfer(is, os);
-        } finally {
-            os.close();
-        }
     }
 
     public static void ensureDirExists(File dir) throws IOException {

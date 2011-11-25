@@ -1,25 +1,36 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.mapreduce;
 
 import java.io.Closeable;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
+import java.util.concurrent.BlockingQueue;
 
-import edu.illinois.cs.dlb.TaskStatus.Status;
-import edu.illinois.cs.dlb.api.Mapper;
-import edu.illinois.cs.dlb.api.Mapper.Context;
-import edu.illinois.cs.dlb.api.RecordReader;
-import edu.illinois.cs.dlb.api.lib.LineRecordReader;
+import edu.illinois.cs.dfs.FileSystem;
+import edu.illinois.cs.dfs.Path;
+import edu.illinois.cs.mapreduce.api.Mapper;
+import edu.illinois.cs.mapreduce.api.RecordReader;
+import edu.illinois.cs.mapreduce.api.Mapper.Context;
+import edu.illinois.cs.mapreduce.api.text.LineRecordReader;
 
-class Worker implements Runnable {
+class TaskRunner implements Runnable {
 
-    private final WorkManager workManager;
+    private final BlockingQueue<Task> inQueue;
+    private final BlockingQueue<Task> outQueue;
+    // currently needs local file system to load jar
+    private final FileSystem fileSystem;
 
-    Worker(WorkManager workManager) {
-        this.workManager = workManager;
+    public TaskRunner(BlockingQueue<Task> inQueue, BlockingQueue<Task> outQueue, FileSystem fileSystem) {
+        this.inQueue = inQueue;
+        this.outQueue = outQueue;
+        this.fileSystem = fileSystem;
     }
 
     @Override
@@ -27,9 +38,9 @@ class Worker implements Runnable {
         while (true) {
             Task task;
             try {
-                task = workManager.getTaskQueue().take();
+                task = inQueue.take();
             } catch (InterruptedException e) {
-                return;
+                break;
             }
 
             try {
@@ -41,6 +52,12 @@ class Worker implements Runnable {
                     throw (Error)t;
                 t.printStackTrace();
                 task.getStatus().setMessage(t.getMessage());
+            }
+
+            try {
+                outQueue.put(task);
+            } catch (InterruptedException e) {
+                break;
             }
         }
     }
@@ -66,8 +83,8 @@ class Worker implements Runnable {
     }
 
     private ClassLoader newClassLoader(Task task) throws IOException {
-        File jarFile = workManager.getFile(task.getJar());
-        URL[] urls = new URL[] {jarFile.toURI().toURL()};
+        Path jarPath = task.getJarPath();
+        URL[] urls = new URL[] {fileSystem.toURL(jarPath)};
         return new URLClassLoader(urls);
     }
 
@@ -78,36 +95,42 @@ class Worker implements Runnable {
         return clazz.newInstance();
     }
 
+    // TODO RecordReader hard-coded right now
     private <K, V> RecordReader<K, V> newRecordReader(Task task, ClassLoader cl) throws IOException {
-        File input = workManager.getFile(task.getInputFile());
-        // TODO hard-coded right now
+        Path input = task.getInputPath();
+        InputStream is = fileSystem.read(input);
         @SuppressWarnings("unchecked")
-        RecordReader<K, V> reader = (RecordReader<K, V>)new LineRecordReader(input, 0);
+        RecordReader<K, V> reader = (RecordReader<K, V>)new LineRecordReader(is, 0);
         return reader;
     }
 
     private <K, V> FileContext<K, V> newFileContext(Task task) throws IOException {
-        File output = workManager.getFile(task.getOutputFile());
-        return new FileContext<K, V>(output);
+        Path output = task.getOutputPath();
+        OutputStream os = fileSystem.write(output);
+        return new FileContext<K, V>(os);
     }
 
+    // TODO avoid keeping whole set in memory: limit buffer and spill to
+    // separate files once full. Merge spills at the end
     static class FileContext<K, V> implements Context<K, V>, Closeable {
 
+        private final Map<K, V> map = new TreeMap<K, V>();
         private final Writer writer;
 
-        public FileContext(File file) throws IOException {
-            this.writer = new FileWriter(file);
+        public FileContext(OutputStream os) throws IOException {
+            this.writer = new OutputStreamWriter(os);
         }
 
         @Override
         public void write(K key, V value) throws IOException {
-            String keyS = key.toString();
-            String valueS = value.toString();
-            writer.write(keyS + "\t" + valueS + "\n");
+            map.put(key, value);
+
         }
 
         @Override
         public void close() throws IOException {
+            for (Entry<K, V> entry : map.entrySet())
+                writer.write(entry.getKey() + "\t" + entry.getValue() + "\n");
             writer.close();
         }
     }

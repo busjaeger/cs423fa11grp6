@@ -1,13 +1,13 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.IOException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.dlb.Job.JobID;
+import edu.illinois.cs.mapreduce.Job.JobID;
 
-public interface JobManager extends Remote {
+public interface RemoteJobManager extends Remote {
 
     JobID submitJob(File jarFile, File inputFile) throws IOException, RemoteException;
 

@@ -1,4 +1,4 @@
-package edu.illinois.cs.dlb.util;
+package edu.illinois.cs.dfs;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -6,23 +6,15 @@ import java.util.Collections;
 
 public class Path implements Serializable {
 
-    public static Path path(String... segments) {
-        return new Path(segments);
-    }
-
-    public static Path path(Object... segments) {
-        return new Path(segments);
-    }
-
     private static final long serialVersionUID = 994529050146607958L;
 
     private final String[] segments;
 
-    private Path(String... segments) {
+    public Path(String... segments) {
         this.segments = segments;
     }
 
-    private Path(Object... segments) {
+    public Path(Object... segments) {
         this(toString(segments));
     }
 

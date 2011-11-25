@@ -1,12 +1,10 @@
-package edu.illinois.cs.dlb;
+package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.illinois.cs.dlb.util.ChildID;
-import edu.illinois.cs.dlb.util.ID;
-import edu.illinois.cs.dlb.util.Path;
+import edu.illinois.cs.dfs.Path;
 
 public class Job implements Serializable {
 
@@ -23,13 +21,11 @@ public class Job implements Serializable {
     private final JobID id;
     private final JobStatus status;
     private final Path jar;
-    private final JarDescriptor descriptor;
     private final List<Task> tasks;
 
-    public Job(JobID id, Path jar, JarDescriptor descriptor) {
+    public Job(JobID id, Path jar) {
         this.id = id;
         this.jar = jar;
-        this.descriptor = descriptor;
         this.status = new JobStatus();
         this.tasks = new ArrayList<Task>();
     }
@@ -38,16 +34,16 @@ public class Job implements Serializable {
         return id;
     }
 
+    public Path getPath() {
+        return new Path(id);
+    }
+
     public JobStatus getStatus() {
         return status;
     }
 
     public Path getJar() {
         return jar;
-    }
-
-    public JarDescriptor getDescriptor() {
-        return descriptor;
     }
 
     public List<Task> getTasks() {
