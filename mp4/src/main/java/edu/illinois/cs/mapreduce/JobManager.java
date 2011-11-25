@@ -14,6 +14,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.text.NumberFormat;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -151,37 +152,32 @@ public class JobManager implements RemoteJobManager {
 
         // node ID
         ID id = new ID(config.getId());
+        ID peerId = new ID(config.getPeerId());
 
         // file systems
         File localDir = config.getLocalDir();
         FileUtil.ensureDirExists(localDir);
         FileSystem localFS = new LocalFileSystem(new File(localDir, id.toString()));
-        RemoteFileSystem rfs = new RemoteFileSystemAdapter(localFS);
-
-        ID peerId = new ID(config.getPeerId());
-        RemoteFileSystem peerRfs = new LazyRemoteFileSystem(registry, "/" + peerId + "/file-system");
-        FileSystem peerFs = new FileSystemAdapter(peerRfs);
-
+        FileSystem remoteFS = new FileSystemAdapter(new LazyRemoteFileSystem(registry, "/" + peerId + "/file-system"));
         Map<ID, FileSystem> fileSystems = new HashMap<ID, FileSystem>();
         fileSystems.put(id, localFS);
-        fileSystems.put(peerId, peerFs);
+        fileSystems.put(peerId, remoteFS);
 
         // task managers
-        TaskManager taskManager = new LocalTaskManager(localFS);
-        TaskManager remoteTaskManager = new LazyRemoteTaskManager(registry, "/" + peerId + "/task-manager");
-
+        TaskManager localTM = new LocalTaskManager(localFS);
+        TaskManager remoteTM = new LazyRemoteTaskManager(registry, "/" + peerId + "/task-manager");
         Map<ID, TaskManager> taskManagers = new HashMap<ID, TaskManager>();
-        taskManagers.put(id, taskManager);
-        taskManagers.put(peerId, remoteTaskManager);
+        taskManagers.put(id, localTM);
+        taskManagers.put(peerId, remoteTM);
 
         RemoteJobManager manager = new JobManager(peerId, taskManagers, fileSystems);
 
         int port = config.getRmiPort();
-        rebind(registry, "/" + peerId + "/file-system", rfs, port);
-        rebind(registry, "/" + peerId + "/task-manager", taskManager, ++port);
-        rebind(registry, "/" + peerId + "/job-manager", manager, ++port);
+        rebind(registry, "/" + id + "/file-system", new RemoteFileSystemAdapter(localFS), port);
+        rebind(registry, "/" + id + "/task-manager", localTM, ++port);
+        rebind(registry, "/" + id + "/job-manager", manager, ++port);
 
-        System.out.println("services started");
+        System.out.println("job manager "+id+" started");
     }
 
     private static void rebind(Registry registry, String name, Remote obj, int port) throws IOException {

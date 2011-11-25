@@ -20,3 +20,8 @@ Run the sample:
 4. run sample app
  - run JobConsole launch config
  - to verify that splits were copied check /tmp/jobmanager
+
+Extensions implemented
+- support for user-defined map reduce functions
+- support custom input format and task partitioning
+- support for more than 2 nodes
