@@ -3,8 +3,7 @@ package edu.illinois.cs.mapreduce;
 public class ChildID<T extends ID> extends ID {
 
     private static final long serialVersionUID = -6271684130353007650L;
-
-    private static final char SEP = '-';
+    protected static final char SEP = '-';
 
     protected final T parentID;
 
@@ -34,9 +33,20 @@ public class ChildID<T extends ID> extends ID {
         return id.parentID.equals(parentID);
     }
 
-    @Override
-    public String toString() {
-        return parentID.toString() + SEP + super.toString();
+    public String toQualifiedString() {
+        return parentID.toString() + SEP + toString();
     }
 
+    public String toQualifiedString(int levels) {
+        StringBuilder builder = new StringBuilder(toString());
+        ID p = parentID;
+        for (int i = 0; i < levels; i++) {
+            if (p == null)
+                throw new IllegalArgumentException("too many levels "+levels);
+            builder.insert(0, SEP);
+            builder.insert(0, p.toString());
+            p = p instanceof ChildID ? ((ChildID<?>)p).parentID : null;
+        }
+        return builder.toString();
+    }
 }

@@ -1,84 +1,57 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.illinois.cs.mapreduce.Job.JobID;
-import edu.illinois.cs.mapreduce.api.Partition;
-
+/**
+ * A Task is an independent partition of a Job that can be scheduled on nodes on
+ * the Cluster.
+ * 
+ * @author benjamin
+ */
 public class Task implements Serializable {
 
     private static final long serialVersionUID = -6364601903551472322L;
 
-    public static class TaskID extends ChildID<JobID> {
-        private static final long serialVersionUID = -8143814273176351822L;
-
-        public TaskID(JobID jobID, int value) {
-            super(jobID, value);
-        }
-    }
-
+    // immutable state
     private final TaskID id;
-    private final TaskStatus status;
-    private final Partition partition;
     private final Path inputPath;
-    private final Path outputPath;
-    private final Path jarPath;
-    private final JobDescriptor descriptor;
+    // mutable state
+    private final AtomicInteger counter;
+    private final Collection<TaskAttempt> attempts;
+    private Status status;
 
-    public Task(TaskID id, Partition partition, Path inputPath, Path outputPath, Path jarPath, JobDescriptor descriptor) {
+    public Task(TaskID id, Path inputPath) {
         this.id = id;
-        this.status = new TaskStatus(id);
-        this.partition = partition;
+        this.status = Status.CREATED;
         this.inputPath = inputPath;
-        this.outputPath = outputPath;
-        this.jarPath = jarPath;
-        this.descriptor = descriptor;
+        this.counter = new AtomicInteger();
+        this.attempts = new ArrayList<TaskAttempt>();
     }
 
     public TaskID getId() {
         return id;
     }
 
-    public TaskStatus getStatus() {
-        return status;
-    }
-
-    public Partition getPartition() {
-        return partition;
-    }
-
     public Path getInputPath() {
         return inputPath;
     }
 
-    public Path getOutputPath() {
-        return outputPath;
+    public int nextAttemptID() {
+        return counter.incrementAndGet();
     }
 
-    public Path getJarPath() {
-        return jarPath;
+    public Collection<TaskAttempt> getAttempts() {
+        return attempts;
     }
 
-    public JobDescriptor getDescriptor() {
-        return descriptor;
+    public Status getStatus() {
+        return status;
     }
 
-    @Override
-    public String toString() {
-        return "Task [id=" + id
-            + ", status="
-            + status
-            + ", partition="
-            + partition
-            + ", inputPath="
-            + inputPath
-            + ", outputPath="
-            + outputPath
-            + ", jarPath="
-            + jarPath
-            + ", descriptor="
-            + descriptor
-            + "]";
+    public void setStatus(Status status) {
+        this.status = status;
     }
-
 }

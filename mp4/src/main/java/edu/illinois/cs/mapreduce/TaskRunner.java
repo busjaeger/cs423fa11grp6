@@ -10,64 +10,55 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.Semaphore;
 import java.util.TreeMap;
-import java.util.concurrent.BlockingQueue;
 
 import edu.illinois.cs.mapreduce.api.Mapper;
-import edu.illinois.cs.mapreduce.api.RecordReader;
 import edu.illinois.cs.mapreduce.api.Mapper.Context;
+import edu.illinois.cs.mapreduce.api.RecordReader;
 import edu.illinois.cs.mapreduce.api.lib.LineRecordReader;
 
 class TaskRunner implements Runnable {
 
-    private final BlockingQueue<Task> inQueue;
-    private final BlockingQueue<Task> outQueue;
-    // currently needs local file system to load jar
+    private final TaskAttempt task;
     private final FileSystem fileSystem;
+    private final Semaphore completion;
 
-    public TaskRunner(BlockingQueue<Task> inQueue, BlockingQueue<Task> outQueue, FileSystem fileSystem) {
-        this.inQueue = inQueue;
-        this.outQueue = outQueue;
+    public TaskRunner(TaskAttempt task, FileSystem fileSystem, Semaphore completion) {
+        this.task = task;
         this.fileSystem = fileSystem;
+        this.completion = completion;
     }
 
     @Override
     public void run() {
-        while (true) {
-            Task task;
-            try {
-                task = inQueue.take();
-            } catch (InterruptedException e) {
-                break;
-            }
-
-            try {
-                runMap(task);
-                task.getStatus().setStatus(Status.SUCCEEDED);
-            } catch (Throwable t) {
-                task.getStatus().setStatus(Status.FAILED);
-                if (t instanceof Error)
-                    throw (Error)t;
-                t.printStackTrace();
-                task.getStatus().setMessage(t.getMessage());
-            }
-
-            try {
-                outQueue.put(task);
-            } catch (InterruptedException e) {
-                break;
-            }
+        try {
+            task.getStatus().setStatus(Status.RUNNING);
+            runMap();
+            task.getStatus().setStatus(Status.SUCCEEDED);
+        } catch (InterruptedException e) {
+            task.getStatus().setStatus(Status.CANCELED);
+        } catch (Throwable t) {
+            task.getStatus().setStatus(Status.FAILED);
+            if (t instanceof Error)
+                throw (Error)t;
+            t.printStackTrace();
+            task.getStatus().setMessage(t.getMessage());
+        } finally {
+            completion.release();
         }
     }
 
-    private <K1, V1, K2, V2> void runMap(Task task) throws Exception {
-        ClassLoader cl = newClassLoader(task);
-        Mapper<K1, V1, K2, V2> mapper = newMapper(task, cl);
-        RecordReader<K1, V1> reader = newRecordReader(task, cl);
+    private <K1, V1, K2, V2> void runMap() throws Exception {
+        ClassLoader cl = newClassLoader();
+        Mapper<K1, V1, K2, V2> mapper = newMapper(cl);
+        RecordReader<K1, V1> reader = newRecordReader(cl);
         try {
-            FileContext<K2, V2> context = newFileContext(task);
+            FileContext<K2, V2> context = newFileContext();
             try {
                 while (reader.next()) {
+                    if (Thread.interrupted())
+                        throw new InterruptedException();
                     K1 key = reader.getKey();
                     V1 value = reader.getValue();
                     mapper.map(key, value, context);
@@ -80,21 +71,20 @@ class TaskRunner implements Runnable {
         }
     }
 
-    private ClassLoader newClassLoader(Task task) throws IOException {
+    private ClassLoader newClassLoader() throws IOException {
         Path jarPath = task.getJarPath();
         URL[] urls = new URL[] {fileSystem.toURL(jarPath)};
         return new URLClassLoader(urls);
     }
 
-    private <K1, V1, K2, V2> Mapper<K1, V1, K2, V2> newMapper(Task task, ClassLoader cl) throws Exception {
+    private <K1, V1, K2, V2> Mapper<K1, V1, K2, V2> newMapper(ClassLoader cl) throws Exception {
         String mapperClass = task.getDescriptor().getMapperClass();
         @SuppressWarnings("unchecked")
         Class<Mapper<K1, V1, K2, V2>> clazz = (Class<Mapper<K1, V1, K2, V2>>)cl.loadClass(mapperClass);
         return clazz.newInstance();
     }
 
-    // TODO RecordReader hard-coded right now
-    private <K, V> RecordReader<K, V> newRecordReader(Task task, ClassLoader cl) throws IOException {
+    private <K, V> RecordReader<K, V> newRecordReader(ClassLoader cl) throws IOException {
         Path input = task.getInputPath();
         InputStream is = fileSystem.read(input);
         @SuppressWarnings("unchecked")
@@ -102,7 +92,7 @@ class TaskRunner implements Runnable {
         return reader;
     }
 
-    private <K, V> FileContext<K, V> newFileContext(Task task) throws IOException {
+    private <K, V> FileContext<K, V> newFileContext() throws IOException {
         Path output = task.getOutputPath();
         OutputStream os = fileSystem.write(output);
         return new FileContext<K, V>(os);

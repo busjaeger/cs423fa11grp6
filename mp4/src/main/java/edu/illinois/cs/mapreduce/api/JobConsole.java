@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.mapreduce.Job.JobID;
+import edu.illinois.cs.mapreduce.JobID;
 import edu.illinois.cs.mapreduce.JobManagerService;
 import edu.illinois.cs.mapreduce.Node;
 

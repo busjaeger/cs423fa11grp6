@@ -46,6 +46,10 @@ public class Path implements Serializable {
         return new Path(newSegments);
     }
 
+    public Path append(Object object) {
+        return append(object.toString());
+    }
+
     public int length() {
         return segments.length;
     }

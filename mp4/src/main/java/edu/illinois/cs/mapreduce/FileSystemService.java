@@ -22,4 +22,10 @@ public interface FileSystemService {
 
     void copy(Path dest, InputStream is) throws IOException;
 
+    boolean mkdir(Path path) throws IOException;
+
+    boolean delete(Path path) throws IOException;
+
+    boolean exists(Path path) throws IOException;
+
 }

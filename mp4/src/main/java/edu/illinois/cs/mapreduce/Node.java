@@ -13,6 +13,7 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import com.healthmarketscience.rmiio.RemoteInputStream;
 import com.healthmarketscience.rmiio.RemoteInputStreamClient;
@@ -20,6 +21,7 @@ import com.healthmarketscience.rmiio.RemoteOutputStream;
 import com.healthmarketscience.rmiio.RemoteOutputStreamClient;
 import com.healthmarketscience.rmiio.SimpleRemoteInputStream;
 import com.healthmarketscience.rmiio.SimpleRemoteOutputStream;
+import com.sun.corba.se.impl.orbutil.threadpool.TimeoutException;
 
 /**
  * The node encapsulates the runtime bootstrap and the remote method invocation
@@ -29,7 +31,7 @@ import com.healthmarketscience.rmiio.SimpleRemoteOutputStream;
  */
 public class Node {
 
-    public static Configuration config;
+    public static NodeConfiguration config;
     private static Registry registry;
 
     public static void main(String[] args) throws IOException {
@@ -38,28 +40,28 @@ public class Node {
 
         // file systems
         FileSystem fileSystem = new FileSystem(config.fsRootDir);
-        Map<ID, FileSystemService> fileSystems = newMap(config.nodeId, (FileSystemService)fileSystem);
-        for (ID remoteNodeId : config.remoteNodeIds)
+        Map<NodeID, FileSystemService> fileSystems = newMap(config.nodeId, (FileSystemService)fileSystem);
+        for (NodeID remoteNodeId : config.remoteNodeIds)
             fileSystems.put(remoteNodeId, new RemoteFileSystemAdapter(new LazyRemoteFileSystem(remoteNodeId)));
 
-        // task managers
-        TaskManagerService taskManager = new TaskManager(fileSystem);
-        Map<ID, TaskManagerService> taskManagers = newMap(config.nodeId, taskManager);
-        for (ID remoteNodeId : config.remoteNodeIds)
-            taskManagers.put(remoteNodeId, new LazyTaskManagerService(remoteNodeId));
+        // task executors
+        TaskExecutorService taskExecutor = new TaskExecutor(fileSystem, config.teNumThreads);
+        Map<NodeID, TaskExecutorService> taskExecutors = newMap(config.nodeId, taskExecutor);
+        for (NodeID remoteNodeId : config.remoteNodeIds)
+            taskExecutors.put(remoteNodeId, new LazyTaskExecutorService(remoteNodeId));
 
         // job managers
-        JobManagerService jobManager = new JobManager(config.nodeId, taskManagers, fileSystems);
+        JobManagerService jobManager = new JobManager(config.nodeId, taskExecutors, fileSystems);
 
         rebind(RemoteFileSystem.class, new FileSystemServiceAdapter(fileSystem), config.fsPort);
-        rebind(TaskManagerService.class, taskManager, config.tmPort);
+        rebind(TaskExecutorService.class, taskExecutor, config.tePort);
         rebind(JobManagerService.class, jobManager, config.jmPort);
 
         System.out.println("node " + config.nodeId + " started");
     }
 
     public static void init(String cfgPath) throws IOException {
-        config = cfgPath == null ? Configuration.load() : Configuration.load(new File(cfgPath));
+        config = cfgPath == null ? NodeConfiguration.load() : NodeConfiguration.load(new File(cfgPath));
         registry = LocateRegistry.getRegistry(config.registryHost, config.registryPort);
     }
 
@@ -108,6 +110,11 @@ public class Node {
 
         void copy(Path dest, RemoteInputStream src) throws RemoteException, IOException;
 
+        boolean mkdir(Path path) throws IOException;
+
+        boolean delete(Path path) throws IOException;
+
+        boolean exists(Path path) throws IOException;
     }
 
     /**
@@ -157,17 +164,43 @@ public class Node {
         public void copy(Path dest, RemoteInputStream src) throws RemoteException, IOException {
             getDelegate().copy(dest, src);
         }
-    }
 
-    static class LazyTaskManagerService extends LazyProxy<TaskManagerService> implements TaskManagerService {
-        protected LazyTaskManagerService(ID nodeId) {
-            super(nodeId, TaskManagerService.class);
+        @Override
+        public boolean mkdir(Path path) throws IOException {
+            return getDelegate().mkdir(path);
         }
 
         @Override
-        public void submitTask(Task task) throws IOException {
-            getDelegate().submitTask(task);
+        public boolean delete(Path path) throws IOException {
+            return getDelegate().delete(path);
         }
+
+        @Override
+        public boolean exists(Path path) throws IOException {
+            return getDelegate().exists(path);
+        }
+    }
+
+    static class LazyTaskExecutorService extends LazyProxy<TaskExecutorService> implements TaskExecutorService {
+        protected LazyTaskExecutorService(ID nodeId) {
+            super(nodeId, TaskExecutorService.class);
+        }
+
+        @Override
+        public void execute(TaskAttempt attempt) throws IOException {
+            getDelegate().execute(attempt);
+        }
+
+        @Override
+        public boolean cancel(TaskAttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
+            return getDelegate().cancel(id, timeout, unit);
+        }
+
+        @Override
+        public boolean delete(TaskAttemptID id) throws IOException {
+            return getDelegate().delete(id);
+        }
+
     }
 
     /**
@@ -200,6 +233,21 @@ public class Node {
         public void copy(Path dest, RemoteInputStream src) throws IOException {
             InputStream is = RemoteInputStreamClient.wrap(src);
             fileSystemService.copy(dest, is);
+        }
+
+        @Override
+        public boolean mkdir(Path path) throws IOException {
+            return fileSystemService.mkdir(path);
+        }
+
+        @Override
+        public boolean delete(Path path) throws IOException {
+            return fileSystemService.delete(path);
+        }
+
+        @Override
+        public boolean exists(Path path) throws IOException {
+            return fileSystemService.exists(path);
         }
     }
 
@@ -243,6 +291,21 @@ public class Node {
         public void copy(Path dest, InputStream is) throws IOException {
             RemoteInputStream ris = new SimpleRemoteInputStream(is);
             remoteFileSystem.copy(dest, ris);
+        }
+
+        @Override
+        public boolean mkdir(Path path) throws IOException {
+            return remoteFileSystem.mkdir(path);
+        }
+
+        @Override
+        public boolean delete(Path path) throws IOException {
+            return remoteFileSystem.delete(path);
+        }
+
+        @Override
+        public boolean exists(Path path) throws IOException {
+            return remoteFileSystem.exists(path);
         }
     }
 }

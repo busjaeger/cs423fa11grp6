@@ -4,27 +4,27 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-
+/**
+ * A Job represents a unit of work submitted by the user. The framework splits
+ * the work into a set of tasks that can be executed independently on different
+ * nodes in the cluster.
+ * 
+ * @author benjamin
+ */
 public class Job implements Serializable {
 
     private static final long serialVersionUID = 5073561871061802007L;
 
-    public static class JobID extends ChildID<ID> {
-        private static final long serialVersionUID = -648883430189232695L;
-
-        public JobID(ID jobMgrId, int value) {
-            super(jobMgrId, value);
-        }
-    }
-
     private final JobID id;
+    private final Path path;
     private final JobStatus status;
     private final Path jar;
     private final List<Task> mapTasks;
 
-    public Job(JobID id, Path jar) {
+    public Job(JobID id, String jarName) {
         this.id = id;
-        this.jar = jar;
+        this.path = new Path(id.toQualifiedString());
+        this.jar = path.append(jarName);
         this.status = new JobStatus();
         this.mapTasks = new ArrayList<Task>();
     }
@@ -34,14 +34,14 @@ public class Job implements Serializable {
     }
 
     public Path getPath() {
-        return new Path(id);
+        return path;
     }
 
     public JobStatus getStatus() {
         return status;
     }
 
-    public Path getJar() {
+    public Path getJarPath() {
         return jar;
     }
 

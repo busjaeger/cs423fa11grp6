@@ -7,15 +7,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.text.NumberFormat;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.illinois.cs.mapreduce.Job.JobID;
-import edu.illinois.cs.mapreduce.Task.TaskID;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
@@ -25,25 +22,19 @@ import edu.illinois.cs.mapreduce.api.Partitioner;
  */
 public class JobManager implements JobManagerService {
 
-    private static final NumberFormat NF = NumberFormat.getInstance();
-    static {
-        NF.setMinimumIntegerDigits(5);
-        NF.setGroupingUsed(false);
-    }
-
-    private final ID nodeId;
-    private final ID[] nodeIds;
-    private final Map<ID, TaskManagerService> taskManagers;
-    private final Map<ID, FileSystemService> fileSystems;
-    private final AtomicInteger counter; // TODO persist and resume
+    private final NodeID nodeId;
+    private final NodeID[] nodeIds;
+    private final Map<NodeID, TaskExecutorService> taskExecutors;
+    private final Map<NodeID, FileSystemService> fileSystems;
+    private final AtomicInteger counter;
     private final Map<JobID, Job> jobs;
 
-    JobManager(ID id, Map<ID, TaskManagerService> taskManagers, Map<ID, FileSystemService> fileSystems) {
+    JobManager(NodeID id, Map<NodeID, TaskExecutorService> taskExecutors, Map<NodeID, FileSystemService> fileSystems) {
         this.nodeId = id;
-        this.nodeIds = taskManagers.keySet().toArray(new ID[0]);
-        this.taskManagers = taskManagers;
+        this.nodeIds = taskExecutors.keySet().toArray(new NodeID[0]);
+        this.taskExecutors = taskExecutors;
         this.fileSystems = fileSystems;
-        this.counter = new AtomicInteger(0);
+        this.counter = new AtomicInteger();
         this.jobs = new ConcurrentHashMap<JobID, Job>();
     }
 
@@ -51,8 +42,7 @@ public class JobManager implements JobManagerService {
     public JobID submitJob(File jarFile, File inputFile) throws IOException {
         // 1. create job
         JobID jobId = new JobID(nodeId, counter.incrementAndGet());
-        Path jar = new Path(jobId).append(jarFile.getName());
-        Job job = new Job(jobId, jar);
+        Job job = new Job(jobId, jarFile.getName());
         jobs.put(jobId, job);
         // 2. submit tasks
         submitMapTasks(job, jarFile, inputFile);
@@ -60,8 +50,6 @@ public class JobManager implements JobManagerService {
     }
 
     private void submitMapTasks(Job job, File jarFile, File inputFile) throws IOException {
-        Path inputDir = job.getPath().append("input");
-        Path outputDir = job.getPath().append("output");
         JobDescriptor descriptor = JobDescriptor.read(jarFile);
         ClassLoader cl = new URLClassLoader(new URL[] {jarFile.toURI().toURL()});
         InputFormat<?, ?, ?> inputFormat;
@@ -77,17 +65,18 @@ public class JobManager implements JobManagerService {
             Set<ID> nodesWithJar = new HashSet<ID>();
             int num = 0;
             while (!partitioner.isEOF()) {
-                // 1. chose task manager
-                // current selection policy: robin.
-                // TODO: try capacity-based policy here
-                ID nodeId = nodeIds[num % nodeIds.length];
+                // 1. create sub task for the partition
+                TaskID taskId = new TaskID(job.getId(), num);
+                Path inputPath = job.getPath().append(taskId + "_input");
+                Task task = new Task(taskId, inputPath);
+                job.getMapTasks().add(task);
 
-                // 2. initialize partition paths
-                String partitionPath = "partition-" + NF.format(num);
-                Path inputPath = inputDir.append(partitionPath);
-                Path outputPath = outputDir.append(partitionPath);
+                // 2. chose node to run task on
+                // current selection policy: round-robin
+                // TODO: capacity-based selection policy
+                NodeID nodeId = nodeIds[num % nodeIds.length];
 
-                // 3. write partition to task manager's file system
+                // 3. write partition to node's file system
                 FileSystemService fs = fileSystems.get(nodeId);
                 OutputStream os = fs.write(inputPath);
                 Partition partition;
@@ -99,18 +88,20 @@ public class JobManager implements JobManagerService {
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(nodeId)) {
-                    fs.copy(job.getJar(), jarFile);
+                    fs.copy(job.getJarPath(), jarFile);
                     nodesWithJar.add(nodeId);
                 }
 
-                // 5. create task
-                TaskID taskId = new TaskID(job.getId(), num);
-                Task task = new Task(taskId, partition, inputPath, outputPath, job.getJar(), descriptor);
-                job.getMapTasks().add(task);
+                // 5. create and submit task attempt
+                TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
+                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1)+"_output");
+                TaskAttempt attempt =
+                    new TaskAttempt(attemptID, nodeId, job.getJarPath(), descriptor, partition, inputPath, outputPath);
+                task.getAttempts().add(attempt);
 
                 // 6. submit task
-                TaskManagerService taskManager = taskManagers.get(nodeId);
-                taskManager.submitTask(task);
+                TaskExecutorService taskExecutor = taskExecutors.get(nodeId);
+                taskExecutor.execute(attempt);
 
                 num++;
             }

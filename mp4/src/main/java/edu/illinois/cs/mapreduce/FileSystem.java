@@ -50,6 +50,24 @@ public class FileSystem implements FileSystemService {
         FileUtil.copy(file, src);
     }
 
+    @Override
+    public boolean mkdir(Path path) throws IOException {
+        File file = resolve(path);
+        return file.mkdir();
+    }
+
+    @Override
+    public boolean delete(Path path) throws IOException {
+        File file = resolve(path);
+        return file.delete();
+    }
+
+    @Override
+    public boolean exists(Path path) throws IOException {
+        File file = resolve(path);
+        return file.exists();
+    }
+
     private File resolve(Path path) {
         File file = dir;
         for (String segment : path.segments())

@@ -1,10 +1,16 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
+import java.text.NumberFormat;
 
 public class ID implements Serializable {
 
     private static final long serialVersionUID = -5906669020259138592L;
+    private static final NumberFormat NF = NumberFormat.getInstance();
+    static {
+        NF.setMinimumIntegerDigits(5);
+        NF.setGroupingUsed(false);
+    }
 
     protected final int value;
 
@@ -29,6 +35,7 @@ public class ID implements Serializable {
 
     @Override
     public String toString() {
-        return Integer.toString(value);
+        return NF.format(value);
     }
+
 }
