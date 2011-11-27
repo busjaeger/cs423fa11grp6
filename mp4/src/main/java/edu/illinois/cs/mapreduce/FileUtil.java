@@ -1,4 +1,4 @@
-package edu.illinois.cs.dfs;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.FileInputStream;

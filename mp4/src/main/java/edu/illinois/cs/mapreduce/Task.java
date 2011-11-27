@@ -2,7 +2,6 @@ package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 
-import edu.illinois.cs.dfs.Path;
 import edu.illinois.cs.mapreduce.Job.JobID;
 import edu.illinois.cs.mapreduce.api.Partition;
 

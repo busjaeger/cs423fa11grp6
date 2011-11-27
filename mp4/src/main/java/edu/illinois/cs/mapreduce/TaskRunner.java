@@ -13,12 +13,10 @@ import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 
-import edu.illinois.cs.dfs.FileSystem;
-import edu.illinois.cs.dfs.Path;
 import edu.illinois.cs.mapreduce.api.Mapper;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 import edu.illinois.cs.mapreduce.api.Mapper.Context;
-import edu.illinois.cs.mapreduce.api.text.LineRecordReader;
+import edu.illinois.cs.mapreduce.api.lib.LineRecordReader;
 
 class TaskRunner implements Runnable {
 
@@ -124,7 +122,6 @@ class TaskRunner implements Runnable {
         @Override
         public void write(K key, V value) throws IOException {
             map.put(key, value);
-
         }
 
         @Override

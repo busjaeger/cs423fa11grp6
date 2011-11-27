@@ -4,7 +4,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.illinois.cs.dfs.Path;
 
 public class Job implements Serializable {
 
@@ -21,13 +20,13 @@ public class Job implements Serializable {
     private final JobID id;
     private final JobStatus status;
     private final Path jar;
-    private final List<Task> tasks;
+    private final List<Task> mapTasks;
 
     public Job(JobID id, Path jar) {
         this.id = id;
         this.jar = jar;
         this.status = new JobStatus();
-        this.tasks = new ArrayList<Task>();
+        this.mapTasks = new ArrayList<Task>();
     }
 
     public JobID getId() {
@@ -46,8 +45,8 @@ public class Job implements Serializable {
         return jar;
     }
 
-    public List<Task> getTasks() {
-        return tasks;
+    public List<Task> getMapTasks() {
+        return mapTasks;
     }
 
 }

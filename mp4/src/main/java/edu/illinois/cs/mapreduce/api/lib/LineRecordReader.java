@@ -1,4 +1,4 @@
-package edu.illinois.cs.mapreduce.api.text;
+package edu.illinois.cs.mapreduce.api.lib;
 
 import java.io.BufferedReader;
 import java.io.IOException;

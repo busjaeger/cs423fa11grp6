@@ -4,12 +4,10 @@ import java.io.File;
 import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 
-import edu.illinois.cs.mapreduce.Configuration;
-import edu.illinois.cs.mapreduce.RemoteJobManager;
 import edu.illinois.cs.mapreduce.Job.JobID;
+import edu.illinois.cs.mapreduce.JobManagerService;
+import edu.illinois.cs.mapreduce.Node;
 
 public class JobConsole {
 
@@ -45,6 +43,10 @@ public class JobConsole {
             System.exit(1);
         }
 
+        String cfgPath = args.length > 2 && args[args.length - 2].equals("-config") ? args[args.length - 1] : null;
+        Node.init(cfgPath);
+        JobManagerService jobManager = Node.lookup(Node.config.nodeId, JobManagerService.class);
+
         switch (cmd) {
             case SUBMIT_JOB:
                 if (args.length < 3) {
@@ -54,24 +56,10 @@ public class JobConsole {
                 }
                 File jobJarFile = new File(args[1]);
                 File inputFile = new File(args[2]);
-                Configuration config;
-                if (args.length > 4 && args[3].equals("-config"))
-                    config = Configuration.load(new File(args[4]));
-                else
-                    config = Configuration.load();
-                RemoteJobManager jobClient = getStub(config);
-                JobID id = jobClient.submitJob(jobJarFile, inputFile);
+                JobID id = jobManager.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id);
                 break;
         }
-    }
-
-    private static RemoteJobManager getStub(Configuration config) throws NotBoundException, RemoteException, IOException {
-        String host = config.getRmiRegistryHost();
-        int port = config.getRmiRegistryPort();
-        Registry registry = LocateRegistry.getRegistry(host, port);
-        String path = "/"+config.getId()+"/job-manager";
-        return (RemoteJobManager)registry.lookup(path);
     }
 
     private static void printUsage() {

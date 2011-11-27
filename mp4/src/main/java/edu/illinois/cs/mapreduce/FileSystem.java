@@ -1,4 +1,4 @@
-package edu.illinois.cs.dfs;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -7,44 +7,50 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 
-public class LocalFileSystem implements FileSystem {
+/**
+ * local file system implementation. Resolves paths relative to a local
+ * directory.
+ * 
+ * @author benjamin
+ */
+public class FileSystem implements FileSystemService {
 
     private final File dir;
 
-    public LocalFileSystem(File dir) {
+    public FileSystem(File dir) throws IOException {
+        FileUtil.ensureDirExists(dir);
         this.dir = dir;
     }
 
-    @Override
     public URL toURL(Path path) throws IOException {
-        return getFile(path).toURI().toURL();
+        return resolve(path).toURI().toURL();
     }
 
     @Override
     public InputStream read(Path path) throws IOException {
-        File file = getFile(path);
+        File file = resolve(path);
         return new FileInputStream(file);
     }
 
     @Override
     public OutputStream write(Path dest) throws IOException {
-        File file = getFile(dest);
+        File file = resolve(dest);
         return FileUtil.write(file);
     }
 
     @Override
     public void copy(Path dest, File src) throws IOException {
-        File file = getFile(dest);
+        File file = resolve(dest);
         FileUtil.copy(file, src);
     }
 
     @Override
     public void copy(Path dest, InputStream src) throws IOException {
-        File file = getFile(dest);
+        File file = resolve(dest);
         FileUtil.copy(file, src);
     }
 
-    private File getFile(Path path) {
+    private File resolve(Path path) {
         File file = dir;
         for (String segment : path.segments())
             file = new File(file, segment);

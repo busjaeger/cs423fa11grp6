@@ -1,4 +1,4 @@
-package edu.illinois.cs.dfs;
+package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 import java.util.Arrays;

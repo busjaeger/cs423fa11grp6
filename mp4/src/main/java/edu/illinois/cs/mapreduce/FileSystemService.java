@@ -1,14 +1,18 @@
-package edu.illinois.cs.dfs;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URL;
 
-public interface FileSystem {
-
-    URL toURL(Path path) throws IOException;
+/**
+ * Interface to either a local or remote file system. This interface provides an
+ * input/output stream abstraction to file system users regardless of underlying
+ * implementation.
+ * 
+ * @author benjamin
+ */
+public interface FileSystemService {
 
     InputStream read(Path path) throws IOException;
 
