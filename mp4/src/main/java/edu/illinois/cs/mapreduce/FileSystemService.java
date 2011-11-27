@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
 
 /**
  * Interface to either a local or remote file system. This interface provides an
@@ -13,6 +14,8 @@ import java.io.OutputStream;
  * @author benjamin
  */
 public interface FileSystemService {
+
+    URL toURL(Path jarPath) throws IOException;
 
     InputStream read(Path path) throws IOException;
 

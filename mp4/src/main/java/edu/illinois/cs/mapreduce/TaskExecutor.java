@@ -2,8 +2,12 @@ package edu.illinois.cs.mapreduce;
 
 import java.io.IOException;
 import java.rmi.RemoteException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -36,22 +40,26 @@ class TaskExecutor implements TaskExecutorService {
         public Semaphore getCompletion() {
             return completion;
         }
-
     }
 
-    private final FileSystem fileSystem;
+    private Cluster cluster;
     private final ExecutorService executorService;
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
 
-    TaskExecutor(FileSystem fileSystem, int numThreads) {
-        this.fileSystem = fileSystem;
+    TaskExecutor(int numThreads) {
         this.executorService = Executors.newFixedThreadPool(numThreads);
         this.executions = new HashMap<TaskAttemptID, TaskAttemptExecution>();
+    }
+
+    public void start(Cluster cluster) {
+        this.cluster = cluster;
+        new Thread(new StatusUpdater()).start();
     }
 
     @Override
     public void execute(TaskAttempt attempt) throws RemoteException {
         Semaphore completion = new Semaphore(0);
+        FileSystemService fileSystem = cluster.getFileSystemService(attempt.getNodeID());
         TaskRunner runner = new TaskRunner(attempt, fileSystem, completion);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
@@ -98,6 +106,7 @@ class TaskExecutor implements TaskExecutorService {
             TaskAttemptStatus status = task.getStatus();
             if (!status.isDone())
                 return false;
+            FileSystemService fileSystem = cluster.getFileSystemService(task.getNodeID());
             Path outputPath = task.getOutputPath();
             synchronized (outputPath) {
                 if (fileSystem.exists(outputPath) && !fileSystem.delete(outputPath))
@@ -110,4 +119,36 @@ class TaskExecutor implements TaskExecutorService {
         return true;
     }
 
+    private class StatusUpdater implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
+                Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
+                synchronized (executions) {
+                    for (TaskAttemptExecution execution : executions.values()) {
+                        TaskAttemptStatus status = new TaskAttemptStatus(execution.getTaskAttempt().getStatus());
+                        NodeID nodeId = status.getId().getParentID().getParentID().getParentID();
+                        List<TaskAttemptStatus> nodeStatus = map.get(nodeId);
+                        if (nodeStatus == null)
+                            map.put(nodeId, nodeStatus = new ArrayList<TaskAttemptStatus>());
+                        nodeStatus.add(status);
+                    }
+                }
+                for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
+                    JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
+                    try {
+                        jobManager.updateStatus(entry.getValue().toArray(new TaskAttemptStatus[0]));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+    }
 }

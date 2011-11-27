@@ -1,6 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
-public class JobID extends ChildID<ID> {
+public class JobID extends ChildID<NodeID> {
 
     private static final long serialVersionUID = -648883430189232695L;
 

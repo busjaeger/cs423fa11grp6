@@ -34,7 +34,8 @@ public class ChildID<T extends ID> extends ID {
     }
 
     public String toQualifiedString() {
-        return parentID.toString() + SEP + toString();
+        return (parentID instanceof ChildID ? ((ChildID<?>)parentID).toQualifiedString() : parentID.toString()) + SEP
+            + toString();
     }
 
     public String toQualifiedString(int levels) {
@@ -42,7 +43,7 @@ public class ChildID<T extends ID> extends ID {
         ID p = parentID;
         for (int i = 0; i < levels; i++) {
             if (p == null)
-                throw new IllegalArgumentException("too many levels "+levels);
+                throw new IllegalArgumentException("too many levels " + levels);
             builder.insert(0, SEP);
             builder.insert(0, p.toString());
             p = p instanceof ChildID ? ((ChildID<?>)p).parentID : null;

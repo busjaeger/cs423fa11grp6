@@ -7,7 +7,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,19 +25,18 @@ import edu.illinois.cs.mapreduce.api.Partitioner;
 public class JobManager implements JobManagerService {
 
     private final NodeID nodeId;
-    private final NodeID[] nodeIds;
-    private final Map<NodeID, TaskExecutorService> taskExecutors;
-    private final Map<NodeID, FileSystemService> fileSystems;
+    private Cluster cluster;
     private final AtomicInteger counter;
     private final Map<JobID, Job> jobs;
 
-    JobManager(NodeID id, Map<NodeID, TaskExecutorService> taskExecutors, Map<NodeID, FileSystemService> fileSystems) {
+    JobManager(NodeID id) {
         this.nodeId = id;
-        this.nodeIds = taskExecutors.keySet().toArray(new NodeID[0]);
-        this.taskExecutors = taskExecutors;
-        this.fileSystems = fileSystems;
         this.counter = new AtomicInteger();
         this.jobs = new ConcurrentHashMap<JobID, Job>();
+    }
+
+    public void start(Cluster cluster) {
+        this.cluster = cluster;
     }
 
     @Override
@@ -64,6 +65,7 @@ public class JobManager implements JobManagerService {
             Partitioner partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
             Set<ID> nodesWithJar = new HashSet<ID>();
             int num = 0;
+            List<NodeID> nodeIds = cluster.getNodeIds();
             while (!partitioner.isEOF()) {
                 // 1. create sub task for the partition
                 TaskID taskId = new TaskID(job.getId(), num);
@@ -74,10 +76,10 @@ public class JobManager implements JobManagerService {
                 // 2. chose node to run task on
                 // current selection policy: round-robin
                 // TODO: capacity-based selection policy
-                NodeID nodeId = nodeIds[num % nodeIds.length];
+                NodeID nodeId = nodeIds.get(num % nodeIds.size());
 
                 // 3. write partition to node's file system
-                FileSystemService fs = fileSystems.get(nodeId);
+                FileSystemService fs = cluster.getFileSystemService(nodeId);
                 OutputStream os = fs.write(inputPath);
                 Partition partition;
                 try {
@@ -94,13 +96,13 @@ public class JobManager implements JobManagerService {
 
                 // 5. create and submit task attempt
                 TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
-                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1)+"_output");
+                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "_output");
                 TaskAttempt attempt =
                     new TaskAttempt(attemptID, nodeId, job.getJarPath(), descriptor, partition, inputPath, outputPath);
                 task.getAttempts().add(attempt);
 
                 // 6. submit task
-                TaskExecutorService taskExecutor = taskExecutors.get(nodeId);
+                TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
                 taskExecutor.execute(attempt);
 
                 num++;
@@ -108,6 +110,14 @@ public class JobManager implements JobManagerService {
         } finally {
             is.close();
         }
+    }
+
+    // TODO update Jobs
+    @Override
+    public void updateStatus(TaskAttemptStatus[] statuses) throws IOException {
+        System.out.println("----------------- Status Update -----------------");
+        System.out.println(Arrays.asList(statuses));
+        System.out.println();
     }
 
 }

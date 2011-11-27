@@ -21,10 +21,10 @@ import edu.illinois.cs.mapreduce.api.lib.LineRecordReader;
 class TaskRunner implements Runnable {
 
     private final TaskAttempt task;
-    private final FileSystem fileSystem;
+    private final FileSystemService fileSystem;
     private final Semaphore completion;
 
-    public TaskRunner(TaskAttempt task, FileSystem fileSystem, Semaphore completion) {
+    public TaskRunner(TaskAttempt task, FileSystemService fileSystem, Semaphore completion) {
         this.task = task;
         this.fileSystem = fileSystem;
         this.completion = completion;
@@ -39,11 +39,13 @@ class TaskRunner implements Runnable {
         } catch (InterruptedException e) {
             task.getStatus().setStatus(Status.CANCELED);
         } catch (Throwable t) {
-            task.getStatus().setStatus(Status.FAILED);
+            synchronized (task) {
+                task.getStatus().setStatus(Status.FAILED);
+                task.getStatus().setMessage(t.getMessage());
+            }
             if (t instanceof Error)
                 throw (Error)t;
             t.printStackTrace();
-            task.getStatus().setMessage(t.getMessage());
         } finally {
             completion.release();
         }

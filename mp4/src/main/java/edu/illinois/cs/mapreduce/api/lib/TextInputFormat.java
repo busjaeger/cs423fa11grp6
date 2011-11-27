@@ -9,7 +9,7 @@ import edu.illinois.cs.mapreduce.api.RecordReader;
 public class TextInputFormat implements InputFormat<Long, String, TextPartition> {
 
     private static final String LPP = "lines.per.partition";
-    private static final String LPP_DEFAULT = "100"; // 10K
+    private static final String LPP_DEFAULT = "1000";
 
     @Override
     public TextPartitioner createPartitioner(InputStream is, Properties properties) {

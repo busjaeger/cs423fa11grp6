@@ -34,7 +34,7 @@ public class NodeConfiguration {
 
     public static NodeConfiguration load(Properties props) {
         NodeID nodeId = toNodeID(props.getProperty("node.id", "1"));
-        Iterable<NodeID> remoteNodeIds = getNodeIDs(props, "node.remote.ids");
+        List<NodeID> remoteNodeIds = getNodeIDs(props, "node.remote.ids");
         String registryHost = props.getProperty("node.rmi.registry.host", "localhost");
         int registryPort = toPort(props.getProperty("node.registry.port", "1099"));
 
@@ -57,7 +57,7 @@ public class NodeConfiguration {
         return port;
     }
 
-    private static Iterable<NodeID> getNodeIDs(Properties props, String key) {
+    private static List<NodeID> getNodeIDs(Properties props, String key) {
         StringTokenizer tokenizer = new StringTokenizer(props.getProperty(key));
         List<NodeID> list = new ArrayList<NodeID>();
         while (tokenizer.hasMoreTokens())
@@ -78,7 +78,7 @@ public class NodeConfiguration {
 
     // node configuration
     public final NodeID nodeId;
-    public final Iterable<NodeID> remoteNodeIds;
+    public final List<NodeID> remoteNodeIds;
     public final String registryHost;
     public final int registryPort;
 
@@ -94,7 +94,7 @@ public class NodeConfiguration {
     public final File fsRootDir;
 
     NodeConfiguration(NodeID nodeId,
-                      Iterable<NodeID> remoteNodeIds,
+                      List<NodeID> remoteNodeIds,
                       String registryHost,
                       int registryPort,
                       int jmPort,

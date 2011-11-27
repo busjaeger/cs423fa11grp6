@@ -3,7 +3,7 @@ package edu.illinois.cs.mapreduce;
 import java.io.Serializable;
 import java.text.NumberFormat;
 
-public class ID implements Serializable {
+public class ID implements Serializable, Comparable<ID> {
 
     private static final long serialVersionUID = -5906669020259138592L;
     private static final NumberFormat NF = NumberFormat.getInstance();
@@ -21,6 +21,11 @@ public class ID implements Serializable {
 
     public int getValue() {
         return value;
+    }
+
+    @Override
+    public int compareTo(ID o) {
+        return Integer.valueOf(value).compareTo(o.value);
     }
 
     @Override

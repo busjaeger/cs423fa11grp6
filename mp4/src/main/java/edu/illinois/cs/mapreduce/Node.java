@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
 import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -45,13 +46,20 @@ public class Node {
             fileSystems.put(remoteNodeId, new RemoteFileSystemAdapter(new LazyRemoteFileSystem(remoteNodeId)));
 
         // task executors
-        TaskExecutorService taskExecutor = new TaskExecutor(fileSystem, config.teNumThreads);
-        Map<NodeID, TaskExecutorService> taskExecutors = newMap(config.nodeId, taskExecutor);
+        TaskExecutor taskExecutor = new TaskExecutor(config.teNumThreads);
+        Map<NodeID, TaskExecutorService> taskExecutors = newMap(config.nodeId, (TaskExecutorService)taskExecutor);
         for (NodeID remoteNodeId : config.remoteNodeIds)
             taskExecutors.put(remoteNodeId, new LazyTaskExecutorService(remoteNodeId));
 
         // job managers
-        JobManagerService jobManager = new JobManager(config.nodeId, taskExecutors, fileSystems);
+        JobManager jobManager = new JobManager(config.nodeId);
+        Map<NodeID, JobManagerService> jobManagers = newMap(config.nodeId, (JobManagerService)jobManager);
+        for (NodeID remoteNodeId : config.remoteNodeIds)
+            jobManagers.put(remoteNodeId, new LazyJobManagerService(remoteNodeId));
+
+        Cluster cluster = new Cluster(config.remoteNodeIds, fileSystems, taskExecutors, jobManagers);
+        taskExecutor.start(cluster);
+        jobManager.start(cluster);
 
         rebind(RemoteFileSystem.class, new FileSystemServiceAdapter(fileSystem), config.fsPort);
         rebind(TaskExecutorService.class, taskExecutor, config.tePort);
@@ -200,7 +208,22 @@ public class Node {
         public boolean delete(TaskAttemptID id) throws IOException {
             return getDelegate().delete(id);
         }
+    }
 
+    static class LazyJobManagerService extends LazyProxy<JobManagerService> implements JobManagerService {
+        protected LazyJobManagerService(ID nodeId) {
+            super(nodeId, JobManagerService.class);
+        }
+
+        @Override
+        public JobID submitJob(File jarFile, File inputFile) throws IOException {
+            return getDelegate().submitJob(jarFile, inputFile);
+        }
+
+        @Override
+        public void updateStatus(TaskAttemptStatus[] statuses) throws IOException {
+            getDelegate().updateStatus(statuses);
+        }
     }
 
     /**
@@ -266,6 +289,11 @@ public class Node {
         }
 
         @Override
+        public URL toURL(Path jarPath) throws IOException {
+            throw new UnsupportedOperationException("toURL currently not supported");
+        }
+
+        @Override
         public InputStream read(Path path) throws IOException {
             RemoteInputStream ris = remoteFileSystem.read(path);
             return RemoteInputStreamClient.wrap(ris);
@@ -307,5 +335,6 @@ public class Node {
         public boolean exists(Path path) throws IOException {
             return remoteFileSystem.exists(path);
         }
+
     }
 }
