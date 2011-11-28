@@ -1,39 +1,44 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
-import java.util.EnumSet;
 
-public class TaskAttemptStatus implements Serializable {
+/**
+ * thread safe
+ * 
+ * @author benjamin
+ */
+public class TaskAttemptStatus extends Status<TaskAttemptID> implements Serializable {
 
     private static final long serialVersionUID = -52586956350693369L;
 
-    private final TaskAttemptID id;
-    private Status status;
+    private final NodeID onNodeID;
     private String message;
 
-    public TaskAttemptStatus(TaskAttemptID id) {
-        this.id = id;
-        this.status = Status.CREATED;
+    public TaskAttemptStatus(TaskAttemptID id, NodeID nodeID) {
+        super(id);
+        this.onNodeID = nodeID;
     }
 
     public TaskAttemptStatus(TaskAttemptStatus status) {
-        synchronized (status) {
-            this.id = status.id;
-            this.status = status.status;
-            this.message = status.message;
-        }
+        super(status);
+        this.onNodeID = status.getOnNodeID();
+        this.message = status.getMessage();
     }
 
-    public TaskAttemptID getId() {
-        return id;
+    public NodeID getOnNodeID() {
+        return onNodeID;
     }
 
-    public synchronized Status getStatus() {
-        return status;
+    public NodeID getNodeID() {
+        return getJobID().getParentID();
     }
 
-    public synchronized void setStatus(Status status) {
-        this.status = status;
+    public JobID getJobID() {
+        return getTaskID().getParentID();
+    }
+
+    public TaskID getTaskID() {
+        return id.getParentID();
     }
 
     public synchronized void setMessage(String message) {
@@ -44,13 +49,9 @@ public class TaskAttemptStatus implements Serializable {
         return message;
     }
 
-    public synchronized boolean isDone() {
-        return EnumSet.of(Status.FAILED, Status.CANCELED, Status.SUCCEEDED).contains(status);
-    }
-
     @Override
     public String toString() {
-        return "TaskAttemptStatus [id=" + id.toQualifiedString() + ", status=" + status + ", message=" + message + "]";
+        return "TaskAttemptStatus [id=" + id.toQualifiedString() + ", message=" + message + ", state=" + getState() + "]";
     }
 
 }

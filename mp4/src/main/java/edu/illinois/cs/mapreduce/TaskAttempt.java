@@ -6,7 +6,7 @@ import edu.illinois.cs.mapreduce.api.Partition;
 
 /**
  * A TaskAttempt represents a scheduled task. It is needed to distinguish
- * different executions of the same task.
+ * different executions of the same task. This class is thread safe.
  * 
  * @author benjamin
  */
@@ -25,8 +25,8 @@ public class TaskAttempt implements Serializable {
 
     // state owned by task attempt
     private final TaskAttemptID id;
-    private final TaskAttemptStatus status;
     private final Path outputPath;
+    private final TaskAttemptStatus status;
 
     public TaskAttempt(TaskAttemptID id,
                        NodeID nodeID,
@@ -35,14 +35,25 @@ public class TaskAttempt implements Serializable {
                        Partition partition,
                        Path inputPath,
                        Path outputPath) {
-        this.status = new TaskAttemptStatus(id);
-        this.id = id;
+        this.nodeID = nodeID;
         this.jarPath = jarPath;
         this.descriptor = descriptor;
         this.partition = partition;
         this.inputPath = inputPath;
+        this.id = id;
         this.outputPath = outputPath;
-        this.nodeID = nodeID;
+        this.status = new TaskAttemptStatus(id, nodeID);
+    }
+
+    public TaskAttempt(TaskAttempt attempt) {
+        this.nodeID = attempt.nodeID;
+        this.jarPath = attempt.jarPath;
+        this.descriptor = attempt.descriptor;
+        this.partition = attempt.partition;
+        this.inputPath = attempt.inputPath;
+        this.id = attempt.id;
+        this.outputPath = attempt.outputPath;
+        this.status = new TaskAttemptStatus(attempt.status);
     }
 
     public NodeID getNodeID() {

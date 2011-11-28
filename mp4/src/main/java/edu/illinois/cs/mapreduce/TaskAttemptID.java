@@ -1,6 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
-public class TaskAttemptID extends ChildID<TaskID> {
+public class TaskAttemptID extends ChildID<TaskID, TaskAttemptID> {
 
     private static final long serialVersionUID = 6020078575717454617L;
 

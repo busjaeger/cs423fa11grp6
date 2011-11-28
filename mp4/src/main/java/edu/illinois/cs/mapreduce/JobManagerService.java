@@ -13,6 +13,15 @@ public interface JobManagerService extends Remote {
 
     JobID submitJob(File jarFile, File inputFile) throws IOException;
 
-    void updateStatus(TaskAttemptStatus[] statuses) throws IOException;
+    JobStatus getJobStatus(JobID jobID) throws IOException;
+
+    /**
+     * must be sorted by {@link TaskAttemptID}
+     * 
+     * @param statuses
+     * @return TODO
+     * @throws IOException
+     */
+    boolean updateJobStatuses(TaskAttemptStatus[] statuses) throws IOException;
 
 }

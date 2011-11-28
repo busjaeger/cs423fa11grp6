@@ -3,7 +3,6 @@ package edu.illinois.cs.mapreduce;
 import java.io.IOException;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -48,7 +47,7 @@ class TaskExecutor implements TaskExecutorService {
 
     TaskExecutor(int numThreads) {
         this.executorService = Executors.newFixedThreadPool(numThreads);
-        this.executions = new HashMap<TaskAttemptID, TaskAttemptExecution>();
+        this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
     }
 
     public void start(Cluster cluster) {
@@ -142,7 +141,7 @@ class TaskExecutor implements TaskExecutorService {
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     try {
-                        jobManager.updateStatus(entry.getValue().toArray(new TaskAttemptStatus[0]));
+                        jobManager.updateJobStatuses(entry.getValue().toArray(new TaskAttemptStatus[0]));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }

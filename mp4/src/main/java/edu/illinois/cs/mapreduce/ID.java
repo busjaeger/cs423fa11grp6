@@ -1,20 +1,15 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
-import java.text.NumberFormat;
+import java.util.Comparator;
 
-public class ID implements Serializable, Comparable<ID> {
+public class ID<T extends ID<T>> implements Serializable, Comparable<T> {
 
     private static final long serialVersionUID = -5906669020259138592L;
-    private static final NumberFormat NF = NumberFormat.getInstance();
-    static {
-        NF.setMinimumIntegerDigits(5);
-        NF.setGroupingUsed(false);
-    }
 
     protected final int value;
 
-    public ID(int value) {
+    protected ID(int value) {
         assert value >= 0;
         this.value = value;
     }
@@ -24,7 +19,7 @@ public class ID implements Serializable, Comparable<ID> {
     }
 
     @Override
-    public int compareTo(ID o) {
+    public int compareTo(T o) {
         return Integer.valueOf(value).compareTo(o.value);
     }
 
@@ -35,12 +30,24 @@ public class ID implements Serializable, Comparable<ID> {
 
     @Override
     public boolean equals(Object obj) {
-        return obj instanceof ID && ((ID)obj).value == value;
+        return obj instanceof ID && ((ID<?>)obj).value == value;
     }
 
     @Override
     public String toString() {
-        return NF.format(value);
+        return Integer.toString(value);
     }
 
+    public static int valueFromString(String s) {
+        return Integer.parseInt(s);
+    }
+
+    public static <T extends ID<T>> Comparator<T> getValueComparator() {
+        return new Comparator<T>() {
+            @Override
+            public int compare(T id1, T id2) {
+                return Integer.valueOf(id1.getValue()).compareTo(id2.getValue());
+            }
+        };
+    }
 }

@@ -1,18 +1,14 @@
-package edu.illinois.cs.mapreduce.api;
+package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.mapreduce.JobID;
-import edu.illinois.cs.mapreduce.JobManagerService;
-import edu.illinois.cs.mapreduce.Node;
-
-public class JobConsole {
+public class Console {
 
     static enum Command {
-        SUBMIT_JOB("submit-job");
+        SUBMIT_JOB("submit-job"), JOB_STATUS("job-status");
         private final String string;
 
         private Command(String string) {
@@ -57,13 +53,35 @@ public class JobConsole {
                 File jobJarFile = new File(args[1]);
                 File inputFile = new File(args[2]);
                 JobID id = jobManager.submitJob(jobJarFile, inputFile);
-                System.out.println("Job submitted. ID: " + id);
+                System.out.println("Job submitted. ID: " + id.toQualifiedString());
                 break;
+            case JOB_STATUS:
+                if (args.length < 1) {
+                    System.out.println("invalid arguments to " + Command.JOB_STATUS + " command");
+                    printUsage();
+                    System.exit(1);
+                }
+                JobID jobId = JobID.fromQualifiedString(args[1]);
+                JobStatus job = jobManager.getJobStatus(jobId);
+                System.out.println("Job " + job.getId() + " status:");
+                System.out.println("  State:" + job.getState());
+                System.out.println("  Phase:" + job.getPhase());
+                for (TaskStatus task : job.getTaskStatuses()) {
+                    System.out.println("  Task " + task.getId());
+                    System.out.println("    State:" + task.getState());
+                    for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                        System.out.println("   Attempt " + attempt.getId() + ":");
+                        System.out.println("     On Node:" + attempt.getOnNodeID());
+                        System.out.println("     State:" + attempt.getState());
+                        System.out.println("     Message:" + attempt.getMessage());
+                    }
+                }
         }
     }
 
     private static void printUsage() {
         System.out.println("usage:");
-        System.out.println("submit-job {job-jar-file} {input-file-path}");
+        System.out.println("submit-job {job-jar-file} {input-file-path} [-config {config-file}]");
+        System.out.println("job-status {job-id} [-config {config-file}]");
     }
 }

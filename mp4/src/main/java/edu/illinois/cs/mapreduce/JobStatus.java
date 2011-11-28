@@ -1,23 +1,58 @@
 package edu.illinois.cs.mapreduce;
 
-import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
-public class JobStatus implements Serializable {
+/**
+ * thread safe
+ * 
+ * @author benjamin
+ */
+public class JobStatus extends Status<JobID> {
 
     private static final long serialVersionUID = 387393472618054102L;
 
-    private Status status;
-
-    public JobStatus() {
-        this.status = Status.CREATED;
+    public static enum Phase {
+        MAP, REDUCE
     }
 
-    public Status getStatus() {
-        return status;
+    private Phase phase;
+    private final List<TaskStatus> tasks;
+
+    public JobStatus(JobID id) {
+        super(id);
+        this.phase = Phase.MAP;
+        this.tasks = new ArrayList<TaskStatus>();
     }
 
-    public void setStatus(Status status) {
-        this.status = status;
+    // must be called with lock held
+    public JobStatus(JobStatus jobStatus) {
+        super(jobStatus);
+        this.phase = jobStatus.getPhase();
+        this.tasks = jobStatus.getTaskStatuses();
+        for (int i = 0; i < tasks.size(); i++)
+            tasks.set(i, new TaskStatus(tasks.get(i)));
+    }
+
+    public synchronized Phase getPhase() {
+        return phase;
+    }
+
+    synchronized void setPhase(Phase phase) {
+        this.phase = phase;
+    }
+
+    public synchronized List<TaskStatus> getTaskStatuses() {
+        return new ArrayList<TaskStatus>(tasks);
+    }
+
+    synchronized void addTaskStatus(TaskStatus taskStatus) {
+        tasks.add(taskStatus);
+    }
+
+    @Override
+    public String toString() {
+        return "JobStatus [phase=" + phase + ", tasks=" + tasks + "]";
     }
 
 }

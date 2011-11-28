@@ -13,6 +13,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.Semaphore;
 import java.util.TreeMap;
 
+import edu.illinois.cs.mapreduce.Status.State;
 import edu.illinois.cs.mapreduce.api.Mapper;
 import edu.illinois.cs.mapreduce.api.Mapper.Context;
 import edu.illinois.cs.mapreduce.api.RecordReader;
@@ -32,16 +33,17 @@ class TaskRunner implements Runnable {
 
     @Override
     public void run() {
+        TaskAttemptStatus status = task.getStatus();
         try {
-            task.getStatus().setStatus(Status.RUNNING);
+            status.setState(State.RUNNING);
             runMap();
-            task.getStatus().setStatus(Status.SUCCEEDED);
+            status.setState(State.SUCCEEDED);
         } catch (InterruptedException e) {
-            task.getStatus().setStatus(Status.CANCELED);
+            status.setState(State.CANCELED);
         } catch (Throwable t) {
-            synchronized (task) {
-                task.getStatus().setStatus(Status.FAILED);
-                task.getStatus().setMessage(t.getMessage());
+            synchronized (status) {
+                status.setState(State.FAILED);
+                status.setMessage(t.getMessage());
             }
             if (t instanceof Error)
                 throw (Error)t;

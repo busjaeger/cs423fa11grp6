@@ -12,6 +12,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -57,7 +58,9 @@ public class Node {
         for (NodeID remoteNodeId : config.remoteNodeIds)
             jobManagers.put(remoteNodeId, new LazyJobManagerService(remoteNodeId));
 
-        Cluster cluster = new Cluster(config.remoteNodeIds, fileSystems, taskExecutors, jobManagers);
+        ArrayList<NodeID> nodeIDs = new ArrayList<NodeID>(config.remoteNodeIds);
+        nodeIDs.add(config.nodeId);
+        Cluster cluster = new Cluster(nodeIDs, fileSystems, taskExecutors, jobManagers);
         taskExecutor.start(cluster);
         jobManager.start(cluster);
 
@@ -74,7 +77,7 @@ public class Node {
     }
 
     @SuppressWarnings("unchecked")
-    public static <T extends Remote> T lookup(ID nodeId, Class<T> type) throws IOException {
+    public static <T extends Remote> T lookup(NodeID nodeId, Class<T> type) throws IOException {
         String name = name(nodeId, type);
         try {
             return (T)registry.lookup(name);
@@ -86,10 +89,11 @@ public class Node {
     private static <T extends Remote> void rebind(Class<T> type, T obj, int port) throws IOException {
         Remote remote = UnicastRemoteObject.exportObject(obj, port);
         String name = name(config.nodeId, type);
+        System.out.println("activating service: "+name);
         registry.rebind(name, remote);
     }
 
-    private static String name(ID nodeId, Class<?> type) {
+    private static String name(NodeID nodeId, Class<?> type) {
         return "/" + nodeId + "/" + type.getName();
     }
 
@@ -137,11 +141,11 @@ public class Node {
      * @author benjamin
      */
     private static class LazyProxy<T extends Remote> {
-        private final ID nodeId;
+        private final NodeID nodeId;
         private final Class<T> type;
         private T delegate;
 
-        protected LazyProxy(ID nodeId, Class<T> type) {
+        protected LazyProxy(NodeID nodeId, Class<T> type) {
             this.nodeId = nodeId;
             this.type = type;
         }
@@ -154,7 +158,7 @@ public class Node {
     }
 
     static class LazyRemoteFileSystem extends LazyProxy<RemoteFileSystem> implements RemoteFileSystem {
-        protected LazyRemoteFileSystem(ID nodeId) {
+        protected LazyRemoteFileSystem(NodeID nodeId) {
             super(nodeId, RemoteFileSystem.class);
         }
 
@@ -190,7 +194,7 @@ public class Node {
     }
 
     static class LazyTaskExecutorService extends LazyProxy<TaskExecutorService> implements TaskExecutorService {
-        protected LazyTaskExecutorService(ID nodeId) {
+        protected LazyTaskExecutorService(NodeID nodeId) {
             super(nodeId, TaskExecutorService.class);
         }
 
@@ -211,7 +215,7 @@ public class Node {
     }
 
     static class LazyJobManagerService extends LazyProxy<JobManagerService> implements JobManagerService {
-        protected LazyJobManagerService(ID nodeId) {
+        protected LazyJobManagerService(NodeID nodeId) {
             super(nodeId, JobManagerService.class);
         }
 
@@ -221,8 +225,13 @@ public class Node {
         }
 
         @Override
-        public void updateStatus(TaskAttemptStatus[] statuses) throws IOException {
-            getDelegate().updateStatus(statuses);
+        public boolean updateJobStatuses(TaskAttemptStatus[] statuses) throws IOException {
+            return getDelegate().updateJobStatuses(statuses);
+        }
+
+        @Override
+        public JobStatus getJobStatus(JobID jobID) throws IOException {
+            return getDelegate().getJobStatus(jobID);
         }
     }
 
