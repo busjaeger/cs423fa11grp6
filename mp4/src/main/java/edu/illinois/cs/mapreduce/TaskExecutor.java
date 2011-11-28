@@ -141,7 +141,7 @@ class TaskExecutor implements TaskExecutorService {
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     try {
-                        jobManager.updateJobStatuses(entry.getValue().toArray(new TaskAttemptStatus[0]));
+                        jobManager.updateStatus(entry.getValue().toArray(new TaskAttemptStatus[0]));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }

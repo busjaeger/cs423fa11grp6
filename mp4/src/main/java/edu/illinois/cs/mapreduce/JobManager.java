@@ -133,7 +133,7 @@ public class JobManager implements JobManagerService {
      * makes use of the fact that statuses are sorted
      */
     @Override
-    public boolean updateJobStatuses(TaskAttemptStatus[] statuses) throws IOException {
+    public boolean updateStatus(TaskAttemptStatus[] statuses) throws IOException {
         boolean stateChange = false;
         if (statuses.length > 0) {
             int offset = 0, len = 1;

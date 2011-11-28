@@ -22,6 +22,6 @@ public interface JobManagerService extends Remote {
      * @return TODO
      * @throws IOException
      */
-    boolean updateJobStatuses(TaskAttemptStatus[] statuses) throws IOException;
+    boolean updateStatus(TaskAttemptStatus[] statuses) throws IOException;
 
 }
