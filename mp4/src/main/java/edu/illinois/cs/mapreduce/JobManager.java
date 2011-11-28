@@ -164,7 +164,7 @@ public class JobManager implements JobManagerService {
             if (!current.equals(taskId)) {
                 stateChange |= updateTaskStatus(job.getMapTasks(taskId), statuses, off, len);
                 off = i;
-                len = 0;
+                len = 1;
                 taskId = current;
             } else {
                 len++;
