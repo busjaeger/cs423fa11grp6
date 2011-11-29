@@ -3,15 +3,164 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>310</x>
-      <y>240</y>
+      <x>90</x>
+      <y>90</y>
       <w>110</w>
-      <h>60</h>
+      <h>40</h>
     </coordinates>
-    <panel_attributes>&lt;&lt;interface&gt;&gt;
-Function&lt;I, O&gt;
---
-map(I in) : O</panel_attributes>
+    <panel_attributes>Job
+--</panel_attributes>
     <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>320</x>
+      <y>90</y>
+      <w>140</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>JobStatus
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>170</x>
+      <y>60</y>
+      <w>170</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=1
+status</panel_attributes>
+    <additional_attributes>150;50;30;50</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>320</x>
+      <y>200</y>
+      <w>140</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>TaskStatus
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>300</x>
+      <y>100</y>
+      <w>142</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=*
+taskStatuses</panel_attributes>
+    <additional_attributes>80;100;80;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>90</x>
+      <y>200</y>
+      <w>110</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>Task
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>100</x>
+      <y>100</y>
+      <w>92</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=*
+tasks</panel_attributes>
+    <additional_attributes>50;100;50;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>90</x>
+      <y>310</y>
+      <w>110</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>TaskAttempt
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>90</x>
+      <y>210</y>
+      <w>118</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=*
+attempts</panel_attributes>
+    <additional_attributes>60;100;60;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>320</x>
+      <y>310</y>
+      <w>140</w>
+      <h>40</h>
+    </coordinates>
+    <panel_attributes>TaskAttemptStatus
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>290</x>
+      <y>210</y>
+      <w>166</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=*
+attemptStatuses</panel_attributes>
+    <additional_attributes>90;100;90;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>170</x>
+      <y>170</y>
+      <w>170</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=1
+status</panel_attributes>
+    <additional_attributes>150;50;30;50</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>170</x>
+      <y>280</y>
+      <w>170</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=1
+status</panel_attributes>
+    <additional_attributes>150;50;30;50</additional_attributes>
   </element>
 </diagram>
