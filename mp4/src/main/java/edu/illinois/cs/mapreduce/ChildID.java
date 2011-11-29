@@ -24,7 +24,7 @@ public class ChildID<P extends ID<P>, T extends ChildID<P, T>> extends ID<T> {
 
     public int compareTo(T o) {
         int c = parentID.compareTo(o.parentID);
-        return c == 0 ? c = super.compareTo(o) : c;
+        return c == 0 ? super.compareTo(o) : c;
     }
 
     @Override

@@ -1,7 +1,9 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -22,16 +24,18 @@ public class Job implements Serializable {
     private final Path path;
     private final JobStatus status;
     private final Path jar;
-    private final Map<TaskID, Task> mapTasks;
-    private final Map<TaskID, Task> reduceTasks;
+    private final JobDescriptor descriptor;
+    private final Map<TaskID, Task<MapTaskAttempt>> mapTasks;
+    private final Map<TaskID, Task<ReduceTaskAttempt>> reduceTasks;
 
-    public Job(JobID id, String jarName) {
+    public Job(JobID id, String jarName, JobDescriptor descriptor) {
         this.id = id;
         this.path = new Path(id.toQualifiedString());
         this.jar = path.append(jarName);
+        this.descriptor = descriptor;
         this.status = new JobStatus(id);
-        this.mapTasks = new TreeMap<TaskID, Task>(ID.<TaskID> getValueComparator());
-        this.reduceTasks = new TreeMap<TaskID, Task>(ID.<TaskID> getValueComparator());
+        this.mapTasks = new TreeMap<TaskID, Task<MapTaskAttempt>>(ID.<TaskID> getValueComparator());
+        this.reduceTasks = new TreeMap<TaskID, Task<ReduceTaskAttempt>>(ID.<TaskID> getValueComparator());
     }
 
     public JobID getId() {
@@ -46,15 +50,27 @@ public class Job implements Serializable {
         return jar;
     }
 
-    public synchronized void addMapTask(Task task) {
-        assert task.getId().getParentID().equals(id);
-        mapTasks.put(task.getId(), task);
+    public JobDescriptor getDescriptor() {
+        return descriptor;
+    }
+
+    public synchronized Task<?> getTask(TaskID taskID) {
+        assert taskID.getParentID().equals(id);
+        return taskID.isMap() ? mapTasks.get(taskID) : reduceTasks.get(taskID);
+    }
+
+    @SuppressWarnings("unchecked")
+    public synchronized void addTask(Task<? extends TaskAttempt> task) {
+        TaskID taskID = task.getId();
+        if (taskID.isMap())
+            mapTasks.put(taskID, (Task<MapTaskAttempt>)task);
+        else
+            reduceTasks.put(taskID, (Task<ReduceTaskAttempt>)task);
         status.addTaskStatus(task.getStatus());
     }
 
-    public synchronized Task getMapTasks(TaskID taskID) {
-        assert taskID.getParentID().equals(id);
-        return mapTasks.get(taskID);
+    public synchronized List<Task<MapTaskAttempt>> getMapTasks() {
+        return new ArrayList<Task<MapTaskAttempt>>(mapTasks.values());
     }
 
     public synchronized JobStatus getStatus() {
@@ -93,11 +109,11 @@ public class Job implements Serializable {
      * @param tasks
      * @return
      */
-    private State computeState(Collection<Task> tasks) {
+    private State computeState(Collection<? extends Task<?>> tasks) {
         if (tasks.isEmpty())
             return State.CREATED;
         boolean nonCanceled = false, nonSucceeded = false, runningOrSucceeded = false, waiting = false;
-        for (Task task : tasks) {
+        for (Task<?> task : tasks) {
             State state = task.getStatus().getState();
             switch (state) {
                 case FAILED:

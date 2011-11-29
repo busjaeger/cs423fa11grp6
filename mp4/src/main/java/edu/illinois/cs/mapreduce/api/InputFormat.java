@@ -3,10 +3,10 @@ package edu.illinois.cs.mapreduce.api;
 import java.io.InputStream;
 import java.util.Properties;
 
-public interface InputFormat<K, V, P extends Partition> {
+public abstract class InputFormat<K, V, P extends Partition> {
 
-    Partitioner<P> createPartitioner(InputStream is, Properties properties);
+    public abstract Partitioner<P> createPartitioner(InputStream is, Properties properties);
 
-    RecordReader<K, V> createRecordReader(P partition, InputStream is);
+    public abstract RecordReader<K, V> createRecordReader(P partition, InputStream is);
 
 }

@@ -58,8 +58,7 @@ class TaskExecutor implements TaskExecutorService {
     @Override
     public void execute(TaskAttempt attempt) throws RemoteException {
         Semaphore completion = new Semaphore(0);
-        FileSystemService fileSystem = cluster.getFileSystemService(attempt.getNodeID());
-        TaskRunner runner = new TaskRunner(attempt, fileSystem, completion);
+        TaskRunner runner = new TaskRunner(attempt, completion, cluster);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
             executions.put(attempt.getId(), new TaskAttemptExecution(future, attempt, completion));

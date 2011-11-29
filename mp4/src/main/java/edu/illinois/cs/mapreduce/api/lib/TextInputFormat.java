@@ -6,9 +6,9 @@ import java.util.Properties;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 
-public class TextInputFormat implements InputFormat<Long, String, TextPartition> {
+public class TextInputFormat extends InputFormat<Long, String, TextPartition> {
 
-    private static final String LPP = "lines.per.partition";
+    private static final String LPP = "text.input.format.lines.per.partition";
     private static final String LPP_DEFAULT = "1000";
 
     @Override

@@ -53,4 +53,12 @@ public class Path implements Serializable {
     public int length() {
         return segments.length;
     }
+
+    @Override
+    public String toString() {
+        StringBuilder s = new StringBuilder();
+        for (String segment : segments)
+            s.append('/').append(segment);
+        return s.toString();
+    }
 }

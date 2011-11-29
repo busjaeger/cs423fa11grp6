@@ -24,12 +24,11 @@ public class JobDescriptor implements Serializable {
             String combinerClass = attrs.getValue("CombinerClass");
             String reducerClass = getRequiredAttribute(attrs, "ReducerClass");
             String inputFormatClass = getRequiredAttribute(attrs, "InputFormatClass");
-            String outputKeyClass = null;//getRequiredAttribute(attrs, "OutputKeyClass");
-            String outputValueClass = null;//getRequiredAttribute(attrs, "OutputValueClass");
+            String outputFormatClass = getRequiredAttribute(attrs, "OutputFormatClass");
 
             // load job properties
             Properties properties = new Properties();
-            ZipEntry entry = jar.getEntry("job.properties");
+            ZipEntry entry = jar.getEntry("META-INF/job.properties");
             if (entry != null) {
                 InputStream is = jar.getInputStream(entry);
                 try {
@@ -38,8 +37,8 @@ public class JobDescriptor implements Serializable {
                     is.close();
                 }
             }
-            return new JobDescriptor(mapperClass, combinerClass, reducerClass, inputFormatClass, outputKeyClass,
-                                     outputValueClass, properties);
+            return new JobDescriptor(mapperClass, combinerClass, reducerClass, inputFormatClass, outputFormatClass,
+                                     properties);
         } finally {
             jar.close();
         }
@@ -56,23 +55,20 @@ public class JobDescriptor implements Serializable {
     private final String combinerClass;
     private final String reducerClass;
     private final String inputFormatClass;
-    private final String outputKeyClass;
-    private final String outputValueClass;
+    private final String outputFormatClass;
     private final Properties properties;
 
     public JobDescriptor(String mapperClass,
                          String combinerClass,
                          String reducerClass,
                          String inputFormatClass,
-                         String outputKeyClass,
-                         String outputValueClass,
+                         String outputFormatClass,
                          Properties properties) {
         this.mapperClass = mapperClass;
         this.combinerClass = combinerClass;
         this.reducerClass = reducerClass;
         this.inputFormatClass = inputFormatClass;
-        this.outputKeyClass = outputKeyClass;
-        this.outputValueClass = outputValueClass;
+        this.outputFormatClass = outputFormatClass;
         this.properties = properties;
     }
 
@@ -92,12 +88,8 @@ public class JobDescriptor implements Serializable {
         return inputFormatClass;
     }
 
-    public String getOutputKeyClass() {
-        return outputKeyClass;
-    }
-
-    public String getOutputValueClass() {
-        return outputValueClass;
+    public String getOutputFormatClass() {
+        return outputFormatClass;
     }
 
     public Properties getProperties() {
@@ -113,10 +105,8 @@ public class JobDescriptor implements Serializable {
             + reducerClass
             + ", inputFormatClass="
             + inputFormatClass
-            + ", outputKeyClass="
-            + outputKeyClass
-            + ", outputValueClass="
-            + outputValueClass
+            + ", outputFormatClass="
+            + outputFormatClass
             + ", properties="
             + properties
             + "]";

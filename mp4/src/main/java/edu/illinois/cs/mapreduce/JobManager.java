@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,17 +47,17 @@ public class JobManager implements JobManagerService {
     @Override
     public JobID submitJob(File jarFile, File inputFile) throws IOException {
         // 1. create job
+        JobDescriptor descriptor = JobDescriptor.read(jarFile);
         JobID jobId = new JobID(nodeId, counter.incrementAndGet());
-        Job job = new Job(jobId, jarFile.getName());
+        Job job = new Job(jobId, jarFile.getName(), descriptor);
         jobs.put(jobId, job);
         // 2. submit tasks
         scheduleMapTasks(job, jarFile, inputFile);
         return jobId;
     }
 
-    
     private <K, V, P extends Partition> void scheduleMapTasks(Job job, File jarFile, File inputFile) throws IOException {
-        JobDescriptor descriptor = JobDescriptor.read(jarFile);
+        JobDescriptor descriptor = job.getDescriptor();
         InputFormat<K, V, P> inputFormat;
         try {
             inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
@@ -71,10 +72,10 @@ public class JobManager implements JobManagerService {
             List<NodeID> nodeIds = cluster.getNodeIds();
             while (!partitioner.isEOF()) {
                 // 1. create sub task for the partition
-                TaskID taskId = new TaskID(job.getId(), num);
+                TaskID taskId = new TaskID(job.getId(), num, true);
                 Path inputPath = job.getPath().append(taskId + "_input");
-                Task task = new Task(taskId, inputPath);
-                job.addMapTask(task);
+                Task<MapTaskAttempt> task = new Task<MapTaskAttempt>(taskId);
+                job.addTask(task);
 
                 // 2. chose node to run task on
                 // current selection policy: round-robin
@@ -100,13 +101,14 @@ public class JobManager implements JobManagerService {
                 // 5. create and submit task attempt
                 TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
                 Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "_output");
-                TaskAttempt attempt =
-                    new TaskAttempt(attemptID, nodeId, job.getJarPath(), descriptor, partition, inputPath, outputPath);
+                MapTaskAttempt attempt =
+                    new MapTaskAttempt(attemptID, nodeId, job.getJarPath(), descriptor, partition, inputPath,
+                                       outputPath);
                 task.addAttempt(attempt);
 
                 // 6. submit task
                 TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
-                taskExecutor.execute(new TaskAttempt(attempt));
+                taskExecutor.execute(new MapTaskAttempt(attempt));
 
                 num++;
             }
@@ -115,9 +117,42 @@ public class JobManager implements JobManagerService {
         }
     }
 
-    private void scheduleReduceTasks(Job job) {
+    // currently one reducer scheduled locally
+    private void scheduleReduceTasks(Job job) throws IOException {
+        // 1. create fields
+        TaskID taskID = new TaskID(job.getId(), 1, false);
+        TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
+        Path outputPath = job.getPath().append("output");
+        Path jarPath = job.getJarPath();
+        JobDescriptor descriptor = job.getDescriptor();
+
+        // 2. collect all output paths
+        List<Task<MapTaskAttempt>> mapTasks = job.getMapTasks();
+        List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>(mapTasks.size());
+        for (Task<MapTaskAttempt> mapTask : mapTasks) {
+            TaskAttempt a = null;
+            for (MapTaskAttempt attempt : mapTask.getAttempts())
+                if (attempt.getStatus().getState() == State.SUCCEEDED) {
+                    a = attempt;
+                    break;
+                }
+            if (a == null)
+                throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
+            QualifiedPath qPath = new QualifiedPath(a.getNodeID(), a.getOutputPath());
+            inputPaths.add(qPath);
+        }
+
+        // create and register attempt
+        ReduceTaskAttempt attempt =
+            new ReduceTaskAttempt(attemptId, nodeId, jarPath, descriptor, outputPath, inputPaths);
+        Task<ReduceTaskAttempt> task = new Task<ReduceTaskAttempt>(taskID);
+        task.addAttempt(attempt);
+        job.addTask(task);
         job.getStatus().setPhase(Phase.REDUCE);
 
+        // submit attempt
+        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
+        taskExecutor.execute(new ReduceTaskAttempt(attempt));
     }
 
     @Override
@@ -159,7 +194,7 @@ public class JobManager implements JobManagerService {
         for (int i = offset + 1; i < offset + length; i++) {
             TaskID current = statuses[i].getTaskID();
             if (!current.equals(taskId)) {
-                stateChange |= updateTaskStatus(job.getMapTasks(taskId), statuses, off, len);
+                stateChange |= updateTaskStatus(job.getTask(taskId), statuses, off, len);
                 off = i;
                 len = 1;
                 taskId = current;
@@ -167,7 +202,7 @@ public class JobManager implements JobManagerService {
                 len++;
             }
         }
-        stateChange |= updateTaskStatus(job.getMapTasks(taskId), statuses, off, len);
+        stateChange |= updateTaskStatus(job.getTask(taskId), statuses, off, len);
         // if any tasks have changed, recompute the job status
         if (stateChange)
             stateChange = job.updateStatus();
@@ -176,13 +211,17 @@ public class JobManager implements JobManagerService {
             executorService.submit(new Runnable() {
                 @Override
                 public void run() {
-                    scheduleReduceTasks(job);
+                    try {
+                        scheduleReduceTasks(job);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
             });
         return stateChange;
     }
 
-    private boolean updateTaskStatus(Task task, TaskAttemptStatus[] statuses, int offset, int length) {
+    private boolean updateTaskStatus(Task<?> task, TaskAttemptStatus[] statuses, int offset, int length) {
         boolean stateChange = false;
         for (int i = offset; i < offset + length; i++) {
             TaskAttemptStatus newStatus = statuses[i];

@@ -1,6 +1,8 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,45 +15,43 @@ import edu.illinois.cs.mapreduce.Status.State;
  * 
  * @author benjamin
  */
-public class Task implements Serializable {
+public class Task<T extends TaskAttempt> implements Serializable {
 
     private static final long serialVersionUID = -6364601903551472322L;
 
     // immutable state
     private final TaskID id;
-    private final Path inputPath;
     // mutable state
     private final AtomicInteger counter;
-    private final Map<TaskAttemptID, TaskAttempt> attempts;
+    private final Map<TaskAttemptID, T> attempts;
     private final TaskStatus status;
 
-    public Task(TaskID id, Path inputPath) {
+    public Task(TaskID id) {
         this.id = id;
-        this.inputPath = inputPath;
         this.status = new TaskStatus(id);
         this.counter = new AtomicInteger();
-        this.attempts = new TreeMap<TaskAttemptID, TaskAttempt>(ID.<TaskAttemptID> getValueComparator());
+        this.attempts = new TreeMap<TaskAttemptID, T>(ID.<TaskAttemptID> getValueComparator());
     }
 
     public TaskID getId() {
         return id;
     }
 
-    public Path getInputPath() {
-        return inputPath;
-    }
-
     public int nextAttemptID() {
         return counter.incrementAndGet();
     }
 
-    public synchronized void addAttempt(TaskAttempt attempt) {
+    public synchronized void addAttempt(T attempt) {
         attempts.put(attempt.getId(), attempt);
         status.addAttemptStatus(attempt.getStatus());
     }
 
     public synchronized TaskAttempt getAttempt(TaskAttemptID attemptId) {
         return attempts.get(attemptId);
+    }
+
+    public synchronized List<T> getAttempts() {
+        return new ArrayList<T>(attempts.values());
     }
 
     public synchronized TaskStatus getStatus() {
