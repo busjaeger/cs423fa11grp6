@@ -5,8 +5,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,19 +54,18 @@ public class JobManager implements JobManagerService {
         return jobId;
     }
 
-    private void scheduleMapTasks(Job job, File jarFile, File inputFile) throws IOException {
+    
+    private <K, V, P extends Partition> void scheduleMapTasks(Job job, File jarFile, File inputFile) throws IOException {
         JobDescriptor descriptor = JobDescriptor.read(jarFile);
-        ClassLoader cl = new URLClassLoader(new URL[] {jarFile.toURI().toURL()});
-        InputFormat<?, ?, ?> inputFormat;
+        InputFormat<K, V, P> inputFormat;
         try {
-            inputFormat = (InputFormat<?, ?, ?>)cl.loadClass(descriptor.getInputFormatClass()).newInstance();
+            inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
         } catch (Exception e) {
             throw new IOException(e);
         }
-
         InputStream is = new FileInputStream(inputFile);
         try {
-            Partitioner partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
+            Partitioner<P> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
             List<NodeID> nodeIds = cluster.getNodeIds();
@@ -120,7 +117,7 @@ public class JobManager implements JobManagerService {
 
     private void scheduleReduceTasks(Job job) {
         job.getStatus().setPhase(Phase.REDUCE);
-        // TODO
+
     }
 
     @Override

@@ -19,7 +19,7 @@ public class TextInputFormat implements InputFormat<Long, String, TextPartition>
 
     @Override
     public RecordReader<Long, String> createRecordReader(TextPartition partition, InputStream is) {
-        long firstLineNumber = partition.getFirstLineNumber();
+        long firstLineNumber = ((TextPartition)partition).getFirstLineNumber();
         return new LineRecordReader(is, firstLineNumber);
     }
 

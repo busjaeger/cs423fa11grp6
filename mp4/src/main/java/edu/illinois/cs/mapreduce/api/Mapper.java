@@ -9,14 +9,6 @@ import java.io.IOException;
 public abstract class Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
 
     /**
-     * @param <K>
-     * @param <V>
-     */
-    public static interface Context<K, V> {
-        void write(K key, V value) throws IOException;
-    }
-
-    /**
      * @param key
      * @param value
      * @param context

@@ -14,17 +14,18 @@ public class JobDescriptor implements Serializable {
 
     private static final long serialVersionUID = 2403104226863768716L;
 
-    // TODO validate
     public static JobDescriptor read(File jobFile) throws IOException {
         JarFile jar = new JarFile(jobFile);
         try {
             // load job descriptor
             Manifest manifest = jar.getManifest();
             Attributes attrs = manifest.getMainAttributes();
-            String mapperClass = attrs.getValue("MapperClass");
-            String inputFormatClass = attrs.getValue("InputFormatClass");
-            String outputKeyClass = attrs.getValue("OutputKeyClass");
-            String outputValueClass = attrs.getValue("OutputValueClass");
+            String mapperClass = getRequiredAttribute(attrs, "MapperClass");
+            String combinerClass = attrs.getValue("CombinerClass");
+            String reducerClass = getRequiredAttribute(attrs, "ReducerClass");
+            String inputFormatClass = getRequiredAttribute(attrs, "InputFormatClass");
+            String outputKeyClass = null;//getRequiredAttribute(attrs, "OutputKeyClass");
+            String outputValueClass = null;//getRequiredAttribute(attrs, "OutputValueClass");
 
             // load job properties
             Properties properties = new Properties();
@@ -37,36 +38,54 @@ public class JobDescriptor implements Serializable {
                     is.close();
                 }
             }
-            return new JobDescriptor(mapperClass, inputFormatClass, outputKeyClass, outputValueClass, properties);
+            return new JobDescriptor(mapperClass, combinerClass, reducerClass, inputFormatClass, outputKeyClass,
+                                     outputValueClass, properties);
         } finally {
             jar.close();
         }
     }
 
+    private static String getRequiredAttribute(Attributes attrs, String name) {
+        String value = attrs.getValue(name);
+        if (value == null || value.length() == 0)
+            throw new IllegalArgumentException("'" + name + "' is a required attribute");
+        return value;
+    }
+
     private final String mapperClass;
+    private final String combinerClass;
+    private final String reducerClass;
     private final String inputFormatClass;
     private final String outputKeyClass;
     private final String outputValueClass;
     private final Properties properties;
 
     public JobDescriptor(String mapperClass,
+                         String combinerClass,
+                         String reducerClass,
                          String inputFormatClass,
                          String outputKeyClass,
                          String outputValueClass,
                          Properties properties) {
         this.mapperClass = mapperClass;
+        this.combinerClass = combinerClass;
+        this.reducerClass = reducerClass;
         this.inputFormatClass = inputFormatClass;
         this.outputKeyClass = outputKeyClass;
         this.outputValueClass = outputValueClass;
         this.properties = properties;
     }
 
-    public static long getSerialversionuid() {
-        return serialVersionUID;
-    }
-
     public String getMapperClass() {
         return mapperClass;
+    }
+
+    public String getCombinerClass() {
+        return combinerClass;
+    }
+
+    public String getReducerClass() {
+        return reducerClass;
     }
 
     public String getInputFormatClass() {
@@ -88,12 +107,18 @@ public class JobDescriptor implements Serializable {
     @Override
     public String toString() {
         return "JobDescriptor [mapperClass=" + mapperClass
+            + ", combinerClass="
+            + combinerClass
+            + ", reducerClass="
+            + reducerClass
             + ", inputFormatClass="
             + inputFormatClass
             + ", outputKeyClass="
             + outputKeyClass
             + ", outputValueClass="
             + outputValueClass
+            + ", properties="
+            + properties
             + "]";
     }
 
