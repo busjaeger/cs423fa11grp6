@@ -6,6 +6,7 @@ To import the project into eclipse
 - mvn eclipse:eclipse
 - open eclipse
 - import existing project navigate to mp4
+- import 'docs/codestyle.xml' as eclipse Java code style
 
 ##################################################
 To Run the sample
