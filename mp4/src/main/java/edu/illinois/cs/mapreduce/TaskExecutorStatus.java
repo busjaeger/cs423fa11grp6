@@ -11,10 +11,10 @@ public class TaskExecutorStatus implements Serializable {
     private final int queueLength;
     private final double throttle;
 
-    public TaskExecutorStatus(NodeID nodeID, double cpuUtil, int length, double throttle) {
+    public TaskExecutorStatus(NodeID nodeID, double cpuUtil, int queueLength, double throttle) {
         this.nodeID = nodeID;
         this.cpuUtilization = cpuUtil;
-        this.queueLength = length;
+        this.queueLength = queueLength;
         this.throttle = throttle;
     }
 

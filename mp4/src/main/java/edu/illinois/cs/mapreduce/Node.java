@@ -47,7 +47,9 @@ public class Node {
             fileSystems.put(remoteNodeId, new RemoteFileSystemAdapter(new LazyRemoteFileSystem(remoteNodeId)));
 
         // task executors
-        TaskExecutor taskExecutor = new TaskExecutor(config.nodeId, config.teNumThreads);
+        TaskExecutor taskExecutor =
+            new TaskExecutor(config.nodeId, config.teNumThreads, config.teThrottle, config.teStatusUpdateInterval,
+                             config.teCpuProfilingInterval);
         Map<NodeID, TaskExecutorService> taskExecutors = newMap(config.nodeId, (TaskExecutorService)taskExecutor);
         for (NodeID remoteNodeId : config.remoteNodeIds)
             taskExecutors.put(remoteNodeId, new LazyTaskExecutorService(remoteNodeId));
@@ -212,12 +214,12 @@ public class Node {
         public boolean delete(TaskAttemptID id) throws IOException {
             return getDelegate().delete(id);
         }
-        
+
         @Override
-		public void setThrottle(double value) throws IOException {
-			getDelegate().setThrottle(value);
-			
-		}
+        public void setThrottle(double value) throws IOException {
+            getDelegate().setThrottle(value);
+
+        }
     }
 
     static class LazyJobManagerService extends LazyProxy<JobManagerService> implements JobManagerService {

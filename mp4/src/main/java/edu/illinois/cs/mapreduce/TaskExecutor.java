@@ -8,10 +8,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Timer;
 import java.util.TreeMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.sun.corba.se.impl.orbutil.threadpool.TimeoutException;
@@ -43,30 +43,41 @@ class TaskExecutor implements TaskExecutorService {
     }
 
     private final NodeID nodeId;
-    private Cluster cluster;
-    private final ExecutorService executorService;
+    private Cluster cluster; // quasi immutable
+    private final ThreadPoolExecutor executorService;
+    private final int cpuProfilingInterval;
+    private final int statusUpdateInterval;
+    private final Timer timer;
+
+    // mutable state
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
-
-    // Hardware Monitor
     private double throttle;
-    private int intervalCheckCpuUtil;
-    private Timer timer;
-    private HardwareMonitorTask hwMonitor;
+    private double cpuUtilization;
 
-    TaskExecutor(NodeID nodeId, int numThreads) {
+    TaskExecutor(NodeID nodeId, int numThreads, double throttle, int statusUpdateInterval, int cpuProfilingInterval) {
         this.nodeId = nodeId;
-        this.executorService = Executors.newFixedThreadPool(numThreads);
+        this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(numThreads);
         this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
-        this.throttle = 0.5; // TODO: set via config or this acceptable default?
-        this.intervalCheckCpuUtil = 5000; // TODO set via config?
+        this.throttle = throttle;
+        this.cpuProfilingInterval = cpuProfilingInterval;
+        this.statusUpdateInterval = statusUpdateInterval;
         this.timer = new Timer();
     }
 
     public void start(Cluster cluster) {
         this.cluster = cluster;
-        this.hwMonitor = new HardwareMonitorTask();
-        this.timer.schedule(hwMonitor, 0, this.intervalCheckCpuUtil);
+        HardwareMonitorTask hwMonitor = new HardwareMonitorTask(this);
+        this.timer.schedule(hwMonitor, 0, this.cpuProfilingInterval);
         new Thread(new StatusUpdater()).start();
+    }
+
+    @Override
+    public synchronized void setThrottle(double value) throws IOException {
+        this.throttle = value;
+    }
+
+    public synchronized void setCpuUtilization(double cpuUtilization) {
+        this.cpuUtilization = cpuUtilization;
     }
 
     @Override
@@ -129,18 +140,12 @@ class TaskExecutor implements TaskExecutorService {
         return true;
     }
 
-    @Override
-    public void setThrottle(double value) throws IOException {
-        this.throttle = value;
-
-    }
-
     private class StatusUpdater implements Runnable {
         @Override
         public void run() {
             while (true) {
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(statusUpdateInterval);
                 } catch (InterruptedException e1) {
                     e1.printStackTrace();
                 }
@@ -155,11 +160,14 @@ class TaskExecutor implements TaskExecutorService {
                         nodeStatus.add(status);
                     }
                 }
+                int queueLength = executorService.getQueue().size();
+                TaskExecutorStatus status;
+                synchronized (this) {
+                    status = new TaskExecutorStatus(nodeId, cpuUtilization, queueLength, throttle);
+                }
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
-                    TaskExecutorStatus status =
-                        new TaskExecutorStatus(nodeId, hwMonitor.getCpuUtil(), executions.size(), throttle);
                     try {
                         jobManager.updateStatus(status, statuses);
                     } catch (IOException e) {

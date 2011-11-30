@@ -45,9 +45,12 @@ public class NodeConfiguration {
 
         int tePort = toPort(props.getProperty("te.rmi.port", "60003"));
         int teNumThreads = toPositiveInt(props.getProperty("te.num.threads", "1"));
+        double teThrottle = Double.parseDouble(props.getProperty("te.throttle", "0.0"));
+        int teStatusUpdateInterval = toPositiveInt(props.getProperty("te.status.update.interval", "5000"));
+        int teCpuProfilingInterval = toPositiveInt(props.getProperty("te.cpu.profiling.interval", "5000"));
 
         return new NodeConfiguration(nodeId, remoteNodeIds, registryHost, registryPort, jmPort, tePort, teNumThreads,
-                                     fsPort, fsRootDir);
+                                     teThrottle, teStatusUpdateInterval, teCpuProfilingInterval, fsPort, fsRootDir);
     }
 
     private static int toPort(String value) {
@@ -88,6 +91,9 @@ public class NodeConfiguration {
     // task executor configuration
     public final int tePort;
     public final int teNumThreads;
+    public final double teThrottle;
+    public final int teStatusUpdateInterval;
+    public final int teCpuProfilingInterval;
 
     // file system configuration
     public final int fsPort;
@@ -100,6 +106,9 @@ public class NodeConfiguration {
                       int jmPort,
                       int tePort,
                       int teNumThreads,
+                      double teThrottle,
+                      int teStatusUpdateInterval,
+                      int teCpuProfilingInterval,
                       int fsPort,
                       File fsRootDir) {
         this.nodeId = nodeId;
@@ -109,6 +118,9 @@ public class NodeConfiguration {
         this.jmPort = jmPort;
         this.tePort = tePort;
         this.teNumThreads = teNumThreads;
+        this.teThrottle = teThrottle;
+        this.teStatusUpdateInterval = teStatusUpdateInterval;
+        this.teCpuProfilingInterval = teCpuProfilingInterval;
         this.fsPort = fsPort;
         this.fsRootDir = fsRootDir;
     }
