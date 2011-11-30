@@ -19,7 +19,7 @@ public interface TaskExecutorService extends Remote {
      * @param attempt
      * @throws IOException
      */
-    void execute(TaskAttempt attempt) throws IOException;
+    void execute(TaskExecutorTask task) throws IOException;
 
     /**
      * Try to cancel the given id.

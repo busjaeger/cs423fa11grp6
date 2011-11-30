@@ -199,8 +199,8 @@ public class Node {
         }
 
         @Override
-        public void execute(TaskAttempt attempt) throws IOException {
-            getDelegate().execute(attempt);
+        public void execute(TaskExecutorTask task) throws IOException {
+            getDelegate().execute(task);
         }
 
         @Override

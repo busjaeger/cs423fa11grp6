@@ -12,24 +12,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 
  * @author benjamin
  */
-public class Task<T extends TaskAttempt> extends Status<TaskID, TaskStatus> implements Serializable {
+public class Task extends Status<TaskID, TaskStatus> implements Serializable {
 
     private static final long serialVersionUID = -6364601903551472322L;
 
     private final AtomicInteger attemptCounter;
-    private final Map<TaskAttemptID, T> attempts;
+    private final Map<TaskAttemptID, TaskAttempt> attempts;
 
     public Task(TaskID id) {
         super(id);
         this.attemptCounter = new AtomicInteger();
-        this.attempts = new TreeMap<TaskAttemptID, T>(ID.<TaskAttemptID> getValueComparator());
+        this.attempts = new TreeMap<TaskAttemptID, TaskAttempt>(ID.<TaskAttemptID> getValueComparator());
     }
 
     public int nextAttemptID() {
         return attemptCounter.incrementAndGet();
     }
 
-    public synchronized void addAttempt(T attempt) {
+    public synchronized void addAttempt(TaskAttempt attempt) {
         attempts.put(attempt.getId(), attempt);
     }
 
@@ -37,8 +37,8 @@ public class Task<T extends TaskAttempt> extends Status<TaskID, TaskStatus> impl
         return attempts.get(attemptId);
     }
 
-    public synchronized T getSuccessfulAttempt() {
-        for (T attempt : attempts.values())
+    public synchronized TaskAttempt getSuccessfulAttempt() {
+        for (TaskAttempt attempt : attempts.values())
             if (attempt.getState() == State.SUCCEEDED)
                 return attempt;
         return null;

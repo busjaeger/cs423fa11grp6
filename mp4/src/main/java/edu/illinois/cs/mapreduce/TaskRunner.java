@@ -27,7 +27,8 @@ import edu.illinois.cs.mapreduce.api.Reducer;
 
 class TaskRunner implements Runnable {
 
-    private final TaskAttempt task;
+    private final NodeID nodeID;
+    private final TaskExecutorTask task;
     private final Cluster cluster;
     private final Semaphore completion;
 
@@ -35,14 +36,14 @@ class TaskRunner implements Runnable {
     private ClassLoader classLoader;
     private JobDescriptor descriptor;
 
-    public TaskRunner(TaskAttempt task, Semaphore completion, Cluster cluster) {
+    public TaskRunner(NodeID nodeID, TaskExecutorTask task, Semaphore completion, Cluster cluster) {
+        this.nodeID = nodeID;
         this.task = task;
         this.completion = completion;
         this.cluster = cluster;
     }
 
     private void init() throws IOException {
-        NodeID nodeID = task.getTargetNodeID();
         this.fileSystem = cluster.getFileSystemService(nodeID);
         Path jarPath = task.getJarPath();
         URL jarURL = fileSystem.toURL(jarPath);
@@ -56,9 +57,9 @@ class TaskRunner implements Runnable {
             task.setState(State.RUNNING);
             init();
             if (task.isMap())
-                runMap((MapTaskAttempt)task);
+                runMap((TaskExecutorMapTask)task);
             else
-                runReduce((ReduceTaskAttempt)task);
+                runReduce((TaskExecutorReduceTask)task);
             task.setState(State.SUCCEEDED);
         } catch (InterruptedException e) {
             task.setState(State.CANCELED);
@@ -72,7 +73,7 @@ class TaskRunner implements Runnable {
         }
     }
 
-    private <K1, V1, K2, V2> void runMap(MapTaskAttempt mapTask) throws Exception {
+    private <K1, V1, K2, V2> void runMap(TaskExecutorMapTask mapTask) throws Exception {
         // create object instances
         Mapper<K1, V1, K2, V2> mapper = newInstance(descriptor.getMapperClass());
         InputFormat<K1, V1, ? super Partition> inputFormat = newInstance(descriptor.getInputFormatClass());
@@ -165,7 +166,7 @@ class TaskRunner implements Runnable {
         }
     }
 
-    private <K1, V1, K2, V2> void runReduce(ReduceTaskAttempt reduceTask) throws Exception {
+    private <K1, V1, K2, V2> void runReduce(TaskExecutorReduceTask reduceTask) throws Exception {
         // 1. merge sorted files into one big sorted file
         Path outputPath = reduceTask.getOutputPath();
         Path mergedPath = outputPath.beforeLast().append(outputPath.last() + "-merged");

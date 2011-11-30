@@ -108,7 +108,8 @@ public class JobManager implements JobManagerService {
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
             List<NodeID> nodeIds = cluster.getNodeIds();
-            MapTaskAttempt previous = null;
+            MapTask previous = null;
+            TaskAttempt previousAttempt = null;
             while (!partitioner.isEOF()) {
                 // 1. chose node to run task on
                 // current selection policy: round-robin
@@ -117,12 +118,10 @@ public class JobManager implements JobManagerService {
 
                 // 1. create sub task for the partition
                 TaskID taskId = new TaskID(job.getId(), num, true);
-                Task<MapTaskAttempt> task = new Task<MapTaskAttempt>(taskId);
-                job.addTask(task);
+                Path inputPath = job.getPath().append(taskId + "-input");
 
                 // 3. write partition to node's file system
                 FileSystemService fs = cluster.getFileSystemService(targetNodeId);
-                Path inputPath = job.getPath().append(taskId + "-input");
                 OutputStream os = fs.write(inputPath);
                 Partition partition;
                 try {
@@ -137,38 +136,33 @@ public class JobManager implements JobManagerService {
                     nodesWithJar.add(targetNodeId);
                 }
 
+                MapTask task = new MapTask(taskId, partition, inputPath);
+                job.addTask(task);
                 // 5. create and register task attempt
                 TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
                 Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
-                MapTaskAttempt attempt =
-                    new MapTaskAttempt(attemptID, targetNodeId, job.getJarPath(), descriptor, partition, inputPath,
-                                       outputPath);
+                TaskAttempt attempt = new TaskAttempt(attemptID, targetNodeId, outputPath);
                 task.addAttempt(attempt);
 
                 // 6. submit previous task
                 if (previous != null)
-                    submitMapTaskAttempt(previous);
-                previous = attempt;
+                    submitMapTaskAttempt(job, previous, previousAttempt);
+                previous = task;
+                previousAttempt = attempt;
                 num++;
             }
             // submit last task attempt
             if (previous != null)
-                submitMapTaskAttempt(previous);
+                submitMapTaskAttempt(job, previous, previousAttempt);
         } finally {
             is.close();
         }
     }
 
-    /**
-     * submit a task attempt to the target TaskExecutorService
-     * 
-     * @param attempt
-     * @throws IOException
-     */
-    private void submitMapTaskAttempt(MapTaskAttempt attempt) throws IOException {
+    private void submitMapTaskAttempt(Job job, MapTask task, TaskAttempt attempt) throws IOException {
         TaskExecutorService taskExecutor = cluster.getTaskExecutorService(attempt.getTargetNodeID());
-        MapTaskAttempt attemptCopy = attempt.copy();
-        taskExecutor.execute(attemptCopy);
+        taskExecutor.execute(new TaskExecutorMapTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
+            .getOutputPath(), attempt.getTargetNodeID(), task.getPartition(), task.getInputPath()));
     }
 
     /**
@@ -182,35 +176,35 @@ public class JobManager implements JobManagerService {
      * @throws IOException
      */
     private void submitReduceTasks(Job job) throws IOException {
-        // 1. create fields
+        // 1. create reduce task
         TaskID taskID = new TaskID(job.getId(), 1, false);
-        TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
-        Path outputPath = job.getPath().append("output");
-        Path jarPath = job.getJarPath();
-        JobDescriptor descriptor = job.getDescriptor();
-
-        // 2. collect all map output paths
-        List<Task<MapTaskAttempt>> mapTasks = job.getMapTasks();
+        // collect all map output paths
+        List<MapTask> mapTasks = job.getMapTasks();
         List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>(mapTasks.size());
-        for (Task<MapTaskAttempt> mapTask : mapTasks) {
+        for (MapTask mapTask : mapTasks) {
             TaskAttempt attempt = mapTask.getSuccessfulAttempt();
             if (attempt == null)
                 throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
             QualifiedPath qPath = new QualifiedPath(attempt.getTargetNodeID(), attempt.getOutputPath());
             inputPaths.add(qPath);
         }
+        ReduceTask task = new ReduceTask(taskID, inputPaths);
 
-        // create and register attempt
-        ReduceTaskAttempt attempt =
-            new ReduceTaskAttempt(attemptId, nodeId, jarPath, descriptor, outputPath, inputPaths);
-        Task<ReduceTaskAttempt> task = new Task<ReduceTaskAttempt>(taskID);
+        // 2. create attempt
+        TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
+        Path outputPath = job.getPath().append("output");
+        TaskAttempt attempt = new TaskAttempt(attemptId, nodeId, outputPath);
         task.addAttempt(attempt);
-        job.addTask(task);
 
-        // submit attempt
-        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
-        ReduceTaskAttempt reduceCopy = attempt.copy();
-        taskExecutor.execute(reduceCopy);
+        // 3. register and submit task
+        job.addTask(task);
+        submitReduceTaskAttemp(job, task, attempt);
+    }
+
+    private void submitReduceTaskAttemp(Job job, ReduceTask task, TaskAttempt attempt) throws IOException {
+        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(attempt.getTargetNodeID());
+        taskExecutor.execute(new TaskExecutorReduceTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
+            .getOutputPath(), attempt.getTargetNodeID(), task.getInputPaths()));
     }
 
     /**

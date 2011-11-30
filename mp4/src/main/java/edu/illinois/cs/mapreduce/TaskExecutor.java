@@ -19,10 +19,10 @@ class TaskExecutor implements TaskExecutorService {
 
     private static class TaskAttemptExecution {
         private final Future<?> future;
-        private final TaskAttempt task;
+        private final TaskExecutorTask task;
         private final Semaphore completion;
 
-        TaskAttemptExecution(Future<?> future, TaskAttempt task, Semaphore completion) {
+        TaskAttemptExecution(Future<?> future, TaskExecutorTask task, Semaphore completion) {
             this.future = future;
             this.task = task;
             this.completion = completion;
@@ -32,7 +32,7 @@ class TaskExecutor implements TaskExecutorService {
             return future;
         }
 
-        public TaskAttempt getTaskAttempt() {
+        public TaskExecutorTask getTask() {
             return task;
         }
 
@@ -58,12 +58,12 @@ class TaskExecutor implements TaskExecutorService {
     }
 
     @Override
-    public void execute(TaskAttempt attempt) throws RemoteException {
+    public void execute(TaskExecutorTask task) throws RemoteException {
         Semaphore completion = new Semaphore(0);
-        TaskRunner runner = new TaskRunner(attempt, completion, cluster);
+        TaskRunner runner = new TaskRunner(nodeId, task, completion, cluster);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
-            executions.put(attempt.getId(), new TaskAttemptExecution(future, attempt, completion));
+            executions.put(task.getId(), new TaskAttemptExecution(future, task, completion));
         }
     }
 
@@ -74,7 +74,7 @@ class TaskExecutor implements TaskExecutorService {
             execution = executions.get(id);
         }
         if (execution != null) {
-            TaskAttempt task = execution.getTaskAttempt();
+            TaskExecutorTask task = execution.getTask();
             if (task.isDone())
                 return true;
             Future<?> future = execution.getFuture();
@@ -101,7 +101,7 @@ class TaskExecutor implements TaskExecutorService {
             execution = executions.get(id);
         }
         if (execution != null) {
-            TaskAttempt task = execution.getTaskAttempt();
+            TaskExecutorTask task = execution.getTask();
             if (!task.isDone())
                 return false;
             FileSystemService fileSystem = cluster.getFileSystemService(task.getTargetNodeID());
@@ -129,7 +129,7 @@ class TaskExecutor implements TaskExecutorService {
                 Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
                 synchronized (executions) {
                     for (TaskAttemptExecution execution : executions.values()) {
-                        TaskAttemptStatus status = execution.getTaskAttempt().toImmutableStatus();
+                        TaskAttemptStatus status = execution.getTask().toImmutableStatus();
                         NodeID nodeId = status.getNodeID();
                         List<TaskAttemptStatus> nodeStatus = map.get(nodeId);
                         if (nodeStatus == null)

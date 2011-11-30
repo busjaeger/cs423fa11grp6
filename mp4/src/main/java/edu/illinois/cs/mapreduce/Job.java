@@ -26,8 +26,8 @@ public class Job extends Status<JobID, JobStatus> {
     private final Path path;
     private final Path jarPath;
     private final JobDescriptor descriptor;
-    private final Map<TaskID, Task<MapTaskAttempt>> mapTasks;
-    private final Map<TaskID, Task<ReduceTaskAttempt>> reduceTasks;
+    private final Map<TaskID, MapTask> mapTasks;
+    private final Map<TaskID, ReduceTask> reduceTasks;
 
     public Job(JobID id, String jarName, JobDescriptor descriptor) {
         super(id);
@@ -35,8 +35,8 @@ public class Job extends Status<JobID, JobStatus> {
         this.path = new Path(id.toQualifiedString());
         this.jarPath = path.append(jarName);
         this.descriptor = descriptor;
-        this.mapTasks = new TreeMap<TaskID, Task<MapTaskAttempt>>(ID.<TaskID> getValueComparator());
-        this.reduceTasks = new TreeMap<TaskID, Task<ReduceTaskAttempt>>(ID.<TaskID> getValueComparator());
+        this.mapTasks = new TreeMap<TaskID, MapTask>(ID.<TaskID> getValueComparator());
+        this.reduceTasks = new TreeMap<TaskID, ReduceTask>(ID.<TaskID> getValueComparator());
     }
 
     public synchronized Phase getPhase() {
@@ -55,22 +55,21 @@ public class Job extends Status<JobID, JobStatus> {
         return descriptor;
     }
 
-    public synchronized Task<?> getTask(TaskID taskID) {
+    public synchronized Task getTask(TaskID taskID) {
         assert taskID.getParentID().equals(id);
         return taskID.isMap() ? mapTasks.get(taskID) : reduceTasks.get(taskID);
     }
 
-    @SuppressWarnings("unchecked")
-    public synchronized void addTask(Task<? extends TaskAttempt> task) {
+    public synchronized void addTask(Task task) {
         TaskID taskID = task.getId();
         if (taskID.isMap())
-            mapTasks.put(taskID, (Task<MapTaskAttempt>)task);
+            mapTasks.put(taskID, (MapTask)task);
         else
-            reduceTasks.put(taskID, (Task<ReduceTaskAttempt>)task);
+            reduceTasks.put(taskID, (ReduceTask)task);
     }
 
-    public synchronized List<Task<MapTaskAttempt>> getMapTasks() {
-        return new ArrayList<Task<MapTaskAttempt>>(mapTasks.values());
+    public synchronized List<MapTask> getMapTasks() {
+        return new ArrayList<MapTask>(mapTasks.values());
     }
 
     @Override
@@ -78,11 +77,11 @@ public class Job extends Status<JobID, JobStatus> {
         return new JobStatus(id, state, phase, toTaskStatuses(mapTasks), toTaskStatuses(reduceTasks));
     }
 
-    private static Iterable<TaskStatus> toTaskStatuses(Map<TaskID, ? extends Task<?>> taskMap) {
-        Collection<? extends Task<?>> tasks = taskMap.values();
+    private static Iterable<TaskStatus> toTaskStatuses(Map<TaskID, ? extends Task> taskMap) {
+        Collection<? extends Task> tasks = taskMap.values();
         TaskStatus[] taskStatuses = new TaskStatus[tasks.size()];
         int i = 0;
-        for (Task<?> task : tasks)
+        for (Task task : tasks)
             taskStatuses[i++] = task.toImmutableStatus();
         return Arrays.asList(taskStatuses);
     }
@@ -95,7 +94,7 @@ public class Job extends Status<JobID, JobStatus> {
         for (int i = offset + 1; i < offset + length; i++) {
             TaskID current = attemptStatuses[i].getTaskID();
             if (!current.equals(taskId)) {
-                Task<?> task = getTask(taskId);
+                Task task = getTask(taskId);
                 stateChange |= task.updateStatus(attemptStatuses, off, len);
                 off = i;
                 len = 1;
@@ -104,7 +103,7 @@ public class Job extends Status<JobID, JobStatus> {
                 len++;
             }
         }
-        Task<?> task = getTask(taskId);
+        Task task = getTask(taskId);
         stateChange |= task.updateStatus(attemptStatuses, off, len);
         // if any tasks have changed, recompute the job status
         return stateChange ? updateState() : stateChange;
@@ -145,11 +144,11 @@ public class Job extends Status<JobID, JobStatus> {
      * @param tasks
      * @return
      */
-    private static State computeState(Collection<? extends Task<?>> tasks) {
+    private static State computeState(Collection<? extends Task> tasks) {
         if (tasks.isEmpty())
             return State.CREATED;
         boolean nonCanceled = false, nonSucceeded = false, runningOrSucceeded = false, waiting = false;
-        for (Task<?> task : tasks) {
+        for (Task task : tasks) {
             switch (task.getState()) {
                 case FAILED:
                     return State.FAILED;
