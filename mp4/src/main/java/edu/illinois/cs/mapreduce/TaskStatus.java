@@ -1,37 +1,24 @@
 package edu.illinois.cs.mapreduce;
 
-import java.util.ArrayList;
-import java.util.List;
+import edu.illinois.cs.mapreduce.Status.State;
 
 /**
  * thread safe
  * 
  * @author benjamin
  */
-public class TaskStatus extends Status<TaskID> {
+public class TaskStatus extends ImmutableStatus<TaskID> {
     private static final long serialVersionUID = -389780613584853202L;
 
-    private final List<TaskAttemptStatus> attemptStatuses;
+    private final Iterable<TaskAttemptStatus> attemptStatuses;
 
-    public TaskStatus(TaskID taskID) {
-        super(taskID);
-        this.attemptStatuses = new ArrayList<TaskAttemptStatus>();
+    public TaskStatus(TaskID id, State state, Iterable<TaskAttemptStatus> attemptStatuses) {
+        super(id, state);
+        this.attemptStatuses = attemptStatuses;
     }
 
-    // must be called with lock held
-    public TaskStatus(TaskStatus taskStatus) {
-        super(taskStatus);
-        this.attemptStatuses = taskStatus.getAttemptStatuses();
-        for (int i = 0; i < attemptStatuses.size(); i++)
-            attemptStatuses.set(i, new TaskAttemptStatus(attemptStatuses.get(i)));
-    }
-
-    synchronized void addAttemptStatus(TaskAttemptStatus status) {
-        attemptStatuses.add(status);
-    }
-
-    public synchronized List<TaskAttemptStatus> getAttemptStatuses() {
-        return new ArrayList<TaskAttemptStatus>(attemptStatuses);
+    public Iterable<TaskAttemptStatus> getAttemptStatuses() {
+        return attemptStatuses;
     }
 
 }

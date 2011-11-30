@@ -15,15 +15,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.illinois.cs.mapreduce.JobStatus.Phase;
+import edu.illinois.cs.mapreduce.Job.Phase;
 import edu.illinois.cs.mapreduce.Status.State;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
 
 /**
- * TODO recover from common failures <br>
- * TODO synchronize properly
+ * This job manager splits jobs into individual tasks and distributes them to
+ * the TaskExecutors in the cluster. It derives job status from periodic status
+ * updates from the TaskExecutors.
  */
 public class JobManager implements JobManagerService {
 
@@ -44,6 +45,10 @@ public class JobManager implements JobManagerService {
         this.cluster = cluster;
     }
 
+    /**
+     * @see edu.illinois.cs.mapreduce.JobManagerService#submitJob(java.io.File,
+     *      java.io.File)
+     */
     @Override
     public JobID submitJob(File jarFile, File inputFile) throws IOException {
         // 1. create job
@@ -52,38 +57,72 @@ public class JobManager implements JobManagerService {
         Job job = new Job(jobId, jarFile.getName(), descriptor);
         jobs.put(jobId, job);
         // 2. submit tasks
-        scheduleMapTasks(job, jarFile, inputFile);
+        try {
+            submitMapTasks(job, jarFile, inputFile);
+        } catch (Throwable t) {
+            job.setState(State.FAILED);
+            if (t instanceof IOException)
+                throw (IOException)t;
+            if (t instanceof RuntimeException)
+                throw (RuntimeException)t;
+            if (t instanceof Error)
+                throw (Error)t;
+            throw new RuntimeException(t);
+        }
         return jobId;
     }
 
-    private <K, V, P extends Partition> void scheduleMapTasks(Job job, File jarFile, File inputFile) throws IOException {
+    /**
+     * <p>
+     * Tasks are created on the same thread, because we need data from the
+     * inputFile, but do not want to assume that it will still exist after
+     * submitJob returns. I.e. a user is free to delete or edit the input file
+     * after submitting the job. We also do not want to create a copy of the
+     * file, because we want to support very large input files, so partitioning
+     * it directly is faster.
+     * </p>
+     * <p>
+     * Task attempts can be submitted as soon as the necessary data is copied
+     * and the task attempt is registered with the job. However, we only submit
+     * attempts after the next attempt has been created and registered.
+     * Otherwise, if all currently registered attempts complete quickly before
+     * scheduling the next one, the JobManager may think the map phase has
+     * completed and schedule the reducer.
+     * </p>
+     * 
+     * @param job
+     * @param jarFile
+     * @param inputFile
+     * @throws IllegalAccessException
+     * @throws InstantiationException
+     * @throws ClassNotFoundException
+     * @throws IOException
+     */
+    private void submitMapTasks(Job job, File jarFile, File inputFile) throws ClassNotFoundException,
+        InstantiationException, IllegalAccessException, IOException {
         JobDescriptor descriptor = job.getDescriptor();
-        InputFormat<K, V, P> inputFormat;
-        try {
-            inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
-        } catch (Exception e) {
-            throw new IOException(e);
-        }
+        InputFormat<?, ?, ?> inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
         InputStream is = new FileInputStream(inputFile);
         try {
-            Partitioner<P> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
+            Partitioner<?> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
             List<NodeID> nodeIds = cluster.getNodeIds();
+            MapTaskAttempt previous = null;
             while (!partitioner.isEOF()) {
+                // 1. chose node to run task on
+                // current selection policy: round-robin
+                // TODO: capacity-based selection policy
+                NodeID targetNodeId = nodeIds.get(num % nodeIds.size());
+
                 // 1. create sub task for the partition
                 TaskID taskId = new TaskID(job.getId(), num, true);
-                Path inputPath = job.getPath().append(taskId + "_input");
                 Task<MapTaskAttempt> task = new Task<MapTaskAttempt>(taskId);
                 job.addTask(task);
 
-                // 2. chose node to run task on
-                // current selection policy: round-robin
-                // TODO: capacity-based selection policy
-                NodeID nodeId = nodeIds.get(num % nodeIds.size());
-
                 // 3. write partition to node's file system
-                FileSystemService fs = cluster.getFileSystemService(nodeId);
+                FileSystemService fs = cluster.getFileSystemService(targetNodeId);
+                Path inputPath = job.getPath().append(taskId + "-input");
                 OutputStream os = fs.write(inputPath);
                 Partition partition;
                 try {
@@ -93,32 +132,56 @@ public class JobManager implements JobManagerService {
                 }
 
                 // 4. write job file if not already written
-                if (!nodesWithJar.contains(nodeId)) {
+                if (!nodesWithJar.contains(targetNodeId)) {
                     fs.copy(job.getJarPath(), jarFile);
-                    nodesWithJar.add(nodeId);
+                    nodesWithJar.add(targetNodeId);
                 }
 
-                // 5. create and submit task attempt
+                // 5. create and register task attempt
                 TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
-                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "_output");
+                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
                 MapTaskAttempt attempt =
-                    new MapTaskAttempt(attemptID, nodeId, job.getJarPath(), descriptor, partition, inputPath,
+                    new MapTaskAttempt(attemptID, targetNodeId, job.getJarPath(), descriptor, partition, inputPath,
                                        outputPath);
                 task.addAttempt(attempt);
 
-                // 6. submit task
-                TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
-                taskExecutor.execute(new MapTaskAttempt(attempt));
-
+                // 6. submit previous task
+                if (previous != null)
+                    submitMapTaskAttempt(previous);
+                previous = attempt;
                 num++;
             }
+            // submit last task attempt
+            if (previous != null)
+                submitMapTaskAttempt(previous);
         } finally {
             is.close();
         }
     }
 
-    // currently one reducer scheduled locally
-    private void scheduleReduceTasks(Job job) throws IOException {
+    /**
+     * submit a task attempt to the target TaskExecutorService
+     * 
+     * @param attempt
+     * @throws IOException
+     */
+    private void submitMapTaskAttempt(MapTaskAttempt attempt) throws IOException {
+        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(attempt.getTargetNodeID());
+        MapTaskAttempt attemptCopy = attempt.copy();
+        taskExecutor.execute(attemptCopy);
+    }
+
+    /**
+     * Currently we schedule one reduce task once all map tasks have completed.
+     * The framework could be extended to support multiple reducers. In that
+     * case each job would output multiple output files that the user would have
+     * to aggregate. The map output files are not copied here, but by the reduce
+     * task itself when run.
+     * 
+     * @param job
+     * @throws IOException
+     */
+    private void submitReduceTasks(Job job) throws IOException {
         // 1. create fields
         TaskID taskID = new TaskID(job.getId(), 1, false);
         TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
@@ -126,19 +189,14 @@ public class JobManager implements JobManagerService {
         Path jarPath = job.getJarPath();
         JobDescriptor descriptor = job.getDescriptor();
 
-        // 2. collect all output paths
+        // 2. collect all map output paths
         List<Task<MapTaskAttempt>> mapTasks = job.getMapTasks();
         List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>(mapTasks.size());
         for (Task<MapTaskAttempt> mapTask : mapTasks) {
-            TaskAttempt a = null;
-            for (MapTaskAttempt attempt : mapTask.getAttempts())
-                if (attempt.getStatus().getState() == State.SUCCEEDED) {
-                    a = attempt;
-                    break;
-                }
-            if (a == null)
+            TaskAttempt attempt = mapTask.getSuccessfulAttempt();
+            if (attempt == null)
                 throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
-            QualifiedPath qPath = new QualifiedPath(a.getNodeID(), a.getOutputPath());
+            QualifiedPath qPath = new QualifiedPath(attempt.getTargetNodeID(), attempt.getOutputPath());
             inputPaths.add(qPath);
         }
 
@@ -148,24 +206,28 @@ public class JobManager implements JobManagerService {
         Task<ReduceTaskAttempt> task = new Task<ReduceTaskAttempt>(taskID);
         task.addAttempt(attempt);
         job.addTask(task);
-        job.getStatus().setPhase(Phase.REDUCE);
 
         // submit attempt
         TaskExecutorService taskExecutor = cluster.getTaskExecutorService(nodeId);
-        taskExecutor.execute(new ReduceTaskAttempt(attempt));
+        ReduceTaskAttempt reduceCopy = attempt.copy();
+        taskExecutor.execute(reduceCopy);
     }
 
-    @Override
-    public JobStatus getJobStatus(JobID jobID) throws IOException {
-        JobStatus jobStatus = jobs.get(jobID).getStatus();
-        return new JobStatus(jobStatus);
-    }
-
-    /*
-     * makes use of the fact that statuses are sorted
+    /**
+     * @see {@link edu.illinois.cs.mapreduce.JobMangerService#}
      */
     @Override
-    public boolean updateStatus(TaskAttemptStatus[] statuses) throws IOException {
+    public JobStatus getJobStatus(JobID jobID) throws IOException {
+        Job job = jobs.get(jobID);
+        return job.toImmutableStatus();
+    }
+
+    /**
+     * Updates all local jobs with the attempt status sent by a remote node. The
+     * contract requires that attempt status objects be sorted by id.
+     */
+    @Override
+    public boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses) throws IOException {
         boolean stateChange = false;
         if (statuses.length > 0) {
             int offset = 0, len = 1;
@@ -186,60 +248,37 @@ public class JobManager implements JobManagerService {
         return stateChange;
     }
 
+    /**
+     * Updates the status of the job for the given ID and schedules a task to
+     * start the job's reduce phase if the job was transitioned into the reduce
+     * phase.
+     * 
+     * @param jobId
+     * @param statuses
+     * @param offset
+     * @param length
+     * @return
+     */
     private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length) {
+        boolean stateChanged;
         final Job job = jobs.get(jobId);
-        boolean stateChange = false;
-        int off = offset, len = 1;
-        TaskID taskId = statuses[offset].getTaskID();
-        for (int i = offset + 1; i < offset + length; i++) {
-            TaskID current = statuses[i].getTaskID();
-            if (!current.equals(taskId)) {
-                stateChange |= updateTaskStatus(job.getTask(taskId), statuses, off, len);
-                off = i;
-                len = 1;
-                taskId = current;
-            } else {
-                len++;
+        synchronized (job) {
+            Phase phase = job.getPhase();
+            stateChanged = job.updateStatus(statuses, offset, length);
+            if (stateChanged && phase != job.getPhase()) {
+                executorService.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            submitReduceTasks(job);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
             }
         }
-        stateChange |= updateTaskStatus(job.getTask(taskId), statuses, off, len);
-        // if any tasks have changed, recompute the job status
-        if (stateChange)
-            stateChange = job.updateStatus();
-        // if map phase has completed successfully, start the reduce phase
-        if (stateChange && job.getStatus().getState() == State.SUCCEEDED && job.getStatus().getPhase() == Phase.MAP)
-            executorService.submit(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        scheduleReduceTasks(job);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-        return stateChange;
-    }
-
-    private boolean updateTaskStatus(Task<?> task, TaskAttemptStatus[] statuses, int offset, int length) {
-        boolean stateChange = false;
-        for (int i = offset; i < offset + length; i++) {
-            TaskAttemptStatus newStatus = statuses[i];
-            TaskAttempt attempt = task.getAttempt(newStatus.getId());
-            TaskAttemptStatus localStatus = attempt.getStatus();
-            stateChange |= updateTaskAttemptStatus(localStatus, newStatus);
-        }
-        return stateChange ? task.updateStatus() : false;
-    }
-
-    private static boolean updateTaskAttemptStatus(TaskAttemptStatus localStatus, TaskAttemptStatus newStatus) {
-        State localState = localStatus.getState();
-        State newState = newStatus.getState();
-        if (localState == newState)
-            return false;
-        localStatus.setState(newState);
-        localStatus.setMessage(newStatus.getMessage());
-        return true;
+        return stateChanged;
     }
 
 }

@@ -11,21 +11,15 @@ public class MapTaskAttempt extends TaskAttempt {
     private final Path inputPath;
 
     public MapTaskAttempt(TaskAttemptID id,
-                          NodeID nodeID,
+                          NodeID targetNodeID,
                           Path jarPath,
                           JobDescriptor descriptor,
                           Partition partition,
                           Path inputPath,
                           Path outputPath) {
-        super(id, nodeID, jarPath, descriptor, outputPath);
+        super(id, targetNodeID, jarPath, descriptor, outputPath);
         this.partition = partition;
         this.inputPath = inputPath;
-    }
-
-    public MapTaskAttempt(MapTaskAttempt attempt) {
-        super(attempt);
-        this.partition = attempt.partition;
-        this.inputPath = attempt.inputPath;
     }
 
     public Partition getPartition() {
@@ -34,6 +28,13 @@ public class MapTaskAttempt extends TaskAttempt {
 
     public Path getInputPath() {
         return inputPath;
+    }
+
+    synchronized MapTaskAttempt copy() {
+        MapTaskAttempt attempt = new MapTaskAttempt(id, targetNodeID, jarPath, descriptor, partition, inputPath, outputPath);
+        attempt.state = state;
+        attempt.message = message;
+        return attempt;
     }
 
 }

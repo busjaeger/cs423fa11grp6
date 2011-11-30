@@ -1,13 +1,11 @@
 package edu.illinois.cs.mapreduce;
 
-import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-
-import edu.illinois.cs.mapreduce.Status.State;
 
 /**
  * A Job represents a unit of work submitted by the user. The framework splits
@@ -16,30 +14,33 @@ import edu.illinois.cs.mapreduce.Status.State;
  * 
  * @author benjamin
  */
-public class Job implements Serializable {
+public class Job extends Status<JobID, JobStatus> {
 
     private static final long serialVersionUID = 5073561871061802007L;
 
-    private final JobID id;
+    static enum Phase {
+        MAP, REDUCE
+    }
+
+    private Phase phase;
     private final Path path;
-    private final JobStatus status;
-    private final Path jar;
+    private final Path jarPath;
     private final JobDescriptor descriptor;
     private final Map<TaskID, Task<MapTaskAttempt>> mapTasks;
     private final Map<TaskID, Task<ReduceTaskAttempt>> reduceTasks;
 
     public Job(JobID id, String jarName, JobDescriptor descriptor) {
-        this.id = id;
+        super(id);
+        this.phase = Phase.MAP;
         this.path = new Path(id.toQualifiedString());
-        this.jar = path.append(jarName);
+        this.jarPath = path.append(jarName);
         this.descriptor = descriptor;
-        this.status = new JobStatus(id);
         this.mapTasks = new TreeMap<TaskID, Task<MapTaskAttempt>>(ID.<TaskID> getValueComparator());
         this.reduceTasks = new TreeMap<TaskID, Task<ReduceTaskAttempt>>(ID.<TaskID> getValueComparator());
     }
 
-    public JobID getId() {
-        return id;
+    public synchronized Phase getPhase() {
+        return phase;
     }
 
     public Path getPath() {
@@ -47,7 +48,7 @@ public class Job implements Serializable {
     }
 
     public Path getJarPath() {
-        return jar;
+        return jarPath;
     }
 
     public JobDescriptor getDescriptor() {
@@ -66,21 +67,52 @@ public class Job implements Serializable {
             mapTasks.put(taskID, (Task<MapTaskAttempt>)task);
         else
             reduceTasks.put(taskID, (Task<ReduceTaskAttempt>)task);
-        status.addTaskStatus(task.getStatus());
     }
 
     public synchronized List<Task<MapTaskAttempt>> getMapTasks() {
         return new ArrayList<Task<MapTaskAttempt>>(mapTasks.values());
     }
 
-    public synchronized JobStatus getStatus() {
-        return status;
+    @Override
+    public synchronized JobStatus toImmutableStatus() {
+        return new JobStatus(id, state, phase, toTaskStatuses(mapTasks), toTaskStatuses(reduceTasks));
     }
 
-    public synchronized boolean updateStatus() {
-        State oldState = status.getState();
-        State newState = oldState;
-        switch (status.getPhase()) {
+    private static Iterable<TaskStatus> toTaskStatuses(Map<TaskID, ? extends Task<?>> taskMap) {
+        Collection<? extends Task<?>> tasks = taskMap.values();
+        TaskStatus[] taskStatuses = new TaskStatus[tasks.size()];
+        int i = 0;
+        for (Task<?> task : tasks)
+            taskStatuses[i++] = task.toImmutableStatus();
+        return Arrays.asList(taskStatuses);
+    }
+
+    public synchronized boolean updateStatus(TaskAttemptStatus[] attemptStatuses, int offset, int length) {
+        // update task statuses
+        boolean stateChange = false;
+        int off = offset, len = 1;
+        TaskID taskId = attemptStatuses[offset].getTaskID();
+        for (int i = offset + 1; i < offset + length; i++) {
+            TaskID current = attemptStatuses[i].getTaskID();
+            if (!current.equals(taskId)) {
+                Task<?> task = getTask(taskId);
+                stateChange |= task.updateStatus(attemptStatuses, off, len);
+                off = i;
+                len = 1;
+                taskId = current;
+            } else {
+                len++;
+            }
+        }
+        Task<?> task = getTask(taskId);
+        stateChange |= task.updateStatus(attemptStatuses, off, len);
+        // if any tasks have changed, recompute the job status
+        return stateChange ? updateState() : stateChange;
+    }
+
+    private synchronized boolean updateState() {
+        State newState = null;
+        switch (phase) {
             case MAP:
                 newState = computeState(mapTasks.values());
                 break;
@@ -88,8 +120,12 @@ public class Job implements Serializable {
                 newState = computeState(reduceTasks.values());
                 break;
         }
-        if (oldState != newState) {
-            status.setState(newState);
+        if (state != newState) {
+            state = newState;
+            if (state == State.SUCCEEDED && phase == Phase.MAP) {
+                state = State.CREATED;
+                phase = Phase.REDUCE;
+            }
             return true;
         }
         return false;
@@ -109,13 +145,12 @@ public class Job implements Serializable {
      * @param tasks
      * @return
      */
-    private State computeState(Collection<? extends Task<?>> tasks) {
+    private static State computeState(Collection<? extends Task<?>> tasks) {
         if (tasks.isEmpty())
             return State.CREATED;
         boolean nonCanceled = false, nonSucceeded = false, runningOrSucceeded = false, waiting = false;
         for (Task<?> task : tasks) {
-            State state = task.getStatus().getState();
-            switch (state) {
+            switch (task.getState()) {
                 case FAILED:
                     return State.FAILED;
                 case CANCELED:
@@ -151,4 +186,5 @@ public class Job implements Serializable {
             return State.WAITING;
         return State.CREATED;
     }
+
 }

@@ -3,164 +3,242 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>90</x>
-      <y>90</y>
-      <w>110</w>
-      <h>40</h>
+      <x>210</x>
+      <y>30</y>
+      <w>230</w>
+      <h>100</h>
     </coordinates>
     <panel_attributes>Job
---</panel_attributes>
+--
+/id : JobID/
+/path : Path/
+/jarPath : Path/
+/descriptor : JobDescriptor/</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>320</x>
-      <y>90</y>
+      <x>570</x>
+      <y>30</y>
       <w>140</w>
-      <h>40</h>
+      <h>80</h>
     </coordinates>
     <panel_attributes>JobStatus
---</panel_attributes>
+--
+/id : JobID/
+state : State
+phase : Phase</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>170</x>
-      <y>60</y>
-      <w>170</w>
+      <x>410</x>
+      <y>20</y>
+      <w>180</w>
       <h>70</h>
     </coordinates>
     <panel_attributes>lt=&lt;.
-m1=1
 status</panel_attributes>
-    <additional_attributes>150;50;30;50</additional_attributes>
+    <additional_attributes>160;50;30;50</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>320</x>
-      <y>200</y>
+      <x>570</x>
+      <y>260</y>
       <w>140</w>
-      <h>40</h>
+      <h>60</h>
     </coordinates>
     <panel_attributes>TaskStatus
---</panel_attributes>
+--
+/id : TaskID/
+state : State</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>300</x>
-      <y>100</y>
+      <x>560</x>
+      <y>80</y>
       <w>142</w>
-      <h>120</h>
+      <h>200</h>
     </coordinates>
     <panel_attributes>lt=&lt;.
 m1=*
 taskStatuses</panel_attributes>
-    <additional_attributes>80;100;80;30</additional_attributes>
+    <additional_attributes>80;180;80;30</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>90</x>
-      <y>200</y>
-      <w>110</w>
-      <h>40</h>
+      <x>210</x>
+      <y>260</y>
+      <w>230</w>
+      <h>60</h>
     </coordinates>
     <panel_attributes>Task
---</panel_attributes>
+--
+/id : TaskID/
+attemptCounter : AtomicInteger</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>100</x>
+      <x>190</x>
       <y>100</y>
-      <w>92</w>
-      <h>120</h>
+      <w>126</w>
+      <h>180</h>
     </coordinates>
     <panel_attributes>lt=&lt;.
 m1=*
-tasks</panel_attributes>
-    <additional_attributes>50;100;50;30</additional_attributes>
+mapTasks</panel_attributes>
+    <additional_attributes>70;160;70;30</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>90</x>
-      <y>310</y>
-      <w>110</w>
-      <h>40</h>
+      <x>210</x>
+      <y>420</y>
+      <w>230</w>
+      <h>110</h>
     </coordinates>
     <panel_attributes>TaskAttempt
---</panel_attributes>
+--
+/id : TaskAttemptID/
+/outputPath : Path/
+/targetNodeID : NodeID/
+/jarPath : Path/
+/descriptor : JobDescriptor/</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>90</x>
-      <y>210</y>
+      <x>260</x>
+      <y>290</y>
       <w>118</w>
-      <h>120</h>
+      <h>150</h>
     </coordinates>
     <panel_attributes>lt=&lt;.
 m1=*
 attempts</panel_attributes>
-    <additional_attributes>60;100;60;30</additional_attributes>
+    <additional_attributes>60;130;60;30</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>320</x>
-      <y>310</y>
+      <x>570</x>
+      <y>430</y>
       <w>140</w>
-      <h>40</h>
+      <h>80</h>
     </coordinates>
     <panel_attributes>TaskAttemptStatus
---</panel_attributes>
+--
+/id : TaskID/
+state : State
+message : String</panel_attributes>
     <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>540</x>
+      <y>290</y>
+      <w>166</w>
+      <h>160</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=*
+attemptStatuses</panel_attributes>
+    <additional_attributes>90;140;90;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>410</x>
+      <y>240</y>
+      <w>180</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+status</panel_attributes>
+    <additional_attributes>160;50;30;50</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>410</x>
+      <y>400</y>
+      <w>180</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+status</panel_attributes>
+    <additional_attributes>160;50;30;50</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
       <x>290</x>
-      <y>210</y>
-      <w>166</w>
-      <h>120</h>
+      <y>100</y>
+      <w>142</w>
+      <h>180</h>
     </coordinates>
     <panel_attributes>lt=&lt;.
 m1=*
-attemptStatuses</panel_attributes>
-    <additional_attributes>90;100;90;30</additional_attributes>
+reduceTasks</panel_attributes>
+    <additional_attributes>80;160;80;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>330</x>
+      <y>560</y>
+      <w>230</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>MapTaskAttempt
+--
+/inputPath : Path/
+/partition : Partition/</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>80</x>
+      <y>560</y>
+      <w>230</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>ReduceTaskAttempt
+--
+/inputPaths : List&lt;QualifiedPath&gt;/</panel_attributes>
+    <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>170</x>
-      <y>170</y>
-      <w>170</w>
-      <h>70</h>
+      <x>160</x>
+      <y>500</y>
+      <w>180</w>
+      <h>80</h>
     </coordinates>
-    <panel_attributes>lt=&lt;.
-m1=1
-status</panel_attributes>
-    <additional_attributes>150;50;30;50</additional_attributes>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>160;30;160;50;30;50;30;60</additional_attributes>
   </element>
   <element>
     <type>com.umlet.element.Relation</type>
     <coordinates>
-      <x>170</x>
-      <y>280</y>
-      <w>170</w>
-      <h>70</h>
+      <x>290</x>
+      <y>500</y>
+      <w>180</w>
+      <h>80</h>
     </coordinates>
-    <panel_attributes>lt=&lt;.
-m1=1
-status</panel_attributes>
-    <additional_attributes>150;50;30;50</additional_attributes>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>30;30;30;50;160;50;160;60</additional_attributes>
   </element>
 </diagram>

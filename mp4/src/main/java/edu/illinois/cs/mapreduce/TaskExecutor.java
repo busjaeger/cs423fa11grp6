@@ -41,11 +41,13 @@ class TaskExecutor implements TaskExecutorService {
         }
     }
 
+    private final NodeID nodeId;
     private Cluster cluster;
     private final ExecutorService executorService;
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
 
-    TaskExecutor(int numThreads) {
+    TaskExecutor(NodeID nodeId, int numThreads) {
+        this.nodeId = nodeId;
         this.executorService = Executors.newFixedThreadPool(numThreads);
         this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
     }
@@ -73,8 +75,7 @@ class TaskExecutor implements TaskExecutorService {
         }
         if (execution != null) {
             TaskAttempt task = execution.getTaskAttempt();
-            TaskAttemptStatus status = task.getStatus();
-            if (status.isDone())
+            if (task.isDone())
                 return true;
             Future<?> future = execution.getFuture();
             if (!future.isDone())
@@ -86,7 +87,7 @@ class TaskExecutor implements TaskExecutorService {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            if (status.isDone())
+            if (task.isDone())
                 return true;
             return false;
         }
@@ -101,10 +102,9 @@ class TaskExecutor implements TaskExecutorService {
         }
         if (execution != null) {
             TaskAttempt task = execution.getTaskAttempt();
-            TaskAttemptStatus status = task.getStatus();
-            if (!status.isDone())
+            if (!task.isDone())
                 return false;
-            FileSystemService fileSystem = cluster.getFileSystemService(task.getNodeID());
+            FileSystemService fileSystem = cluster.getFileSystemService(task.getTargetNodeID());
             Path outputPath = task.getOutputPath();
             synchronized (outputPath) {
                 if (fileSystem.exists(outputPath) && !fileSystem.delete(outputPath))
@@ -129,8 +129,8 @@ class TaskExecutor implements TaskExecutorService {
                 Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
                 synchronized (executions) {
                     for (TaskAttemptExecution execution : executions.values()) {
-                        TaskAttemptStatus status = new TaskAttemptStatus(execution.getTaskAttempt().getStatus());
-                        NodeID nodeId = status.getId().getParentID().getParentID().getParentID();
+                        TaskAttemptStatus status = execution.getTaskAttempt().toImmutableStatus();
+                        NodeID nodeId = status.getNodeID();
                         List<TaskAttemptStatus> nodeStatus = map.get(nodeId);
                         if (nodeStatus == null)
                             map.put(nodeId, nodeStatus = new ArrayList<TaskAttemptStatus>());
@@ -140,13 +140,12 @@ class TaskExecutor implements TaskExecutorService {
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     try {
-                        jobManager.updateStatus(entry.getValue().toArray(new TaskAttemptStatus[0]));
+                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
             }
         }
-
     }
 }

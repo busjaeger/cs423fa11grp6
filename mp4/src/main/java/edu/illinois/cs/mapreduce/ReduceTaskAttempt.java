@@ -9,22 +9,23 @@ public class ReduceTaskAttempt extends TaskAttempt {
     private final List<QualifiedPath> inputPaths;
 
     public ReduceTaskAttempt(TaskAttemptID id,
-                             NodeID nodeID,
+                             NodeID targetNodeID,
                              Path jarPath,
                              JobDescriptor descriptor,
                              Path outputPath,
                              List<QualifiedPath> inputPaths) {
-        super(id, nodeID, jarPath, descriptor, outputPath);
+        super(id, targetNodeID, jarPath, descriptor, outputPath);
         this.inputPaths = inputPaths;
-    }
-
-    public ReduceTaskAttempt(ReduceTaskAttempt attempt) {
-        super(attempt);
-        this.inputPaths = attempt.inputPaths;
     }
 
     public List<QualifiedPath> getInputPaths() {
         return inputPaths;
     }
 
+    synchronized ReduceTaskAttempt copy() {
+        ReduceTaskAttempt attempt = new ReduceTaskAttempt(id, targetNodeID, jarPath, descriptor, outputPath, inputPaths);
+        attempt.state = state;
+        attempt.message = message;
+        return attempt;
+    }
 }

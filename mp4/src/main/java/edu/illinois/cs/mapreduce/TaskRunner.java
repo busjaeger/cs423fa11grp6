@@ -42,7 +42,7 @@ class TaskRunner implements Runnable {
     }
 
     private void init() throws IOException {
-        NodeID nodeID = task.getNodeID();
+        NodeID nodeID = task.getTargetNodeID();
         this.fileSystem = cluster.getFileSystemService(nodeID);
         Path jarPath = task.getJarPath();
         URL jarURL = fileSystem.toURL(jarPath);
@@ -52,22 +52,18 @@ class TaskRunner implements Runnable {
 
     @Override
     public void run() {
-        TaskAttemptStatus status = task.getStatus();
         try {
-            status.setState(State.RUNNING);
+            task.setState(State.RUNNING);
             init();
             if (task.isMap())
                 runMap((MapTaskAttempt)task);
             else
                 runReduce((ReduceTaskAttempt)task);
-            status.setState(State.SUCCEEDED);
+            task.setState(State.SUCCEEDED);
         } catch (InterruptedException e) {
-            status.setState(State.CANCELED);
+            task.setState(State.CANCELED);
         } catch (Throwable t) {
-            synchronized (status) {
-                status.setState(State.FAILED);
-                status.setMessage(t.getMessage());
-            }
+            task.setFailed(t.getMessage());
             if (t instanceof Error)
                 throw (Error)t;
             t.printStackTrace();

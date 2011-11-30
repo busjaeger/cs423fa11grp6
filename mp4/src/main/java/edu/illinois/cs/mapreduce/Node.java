@@ -47,7 +47,7 @@ public class Node {
             fileSystems.put(remoteNodeId, new RemoteFileSystemAdapter(new LazyRemoteFileSystem(remoteNodeId)));
 
         // task executors
-        TaskExecutor taskExecutor = new TaskExecutor(config.teNumThreads);
+        TaskExecutor taskExecutor = new TaskExecutor(config.nodeId, config.teNumThreads);
         Map<NodeID, TaskExecutorService> taskExecutors = newMap(config.nodeId, (TaskExecutorService)taskExecutor);
         for (NodeID remoteNodeId : config.remoteNodeIds)
             taskExecutors.put(remoteNodeId, new LazyTaskExecutorService(remoteNodeId));
@@ -89,7 +89,7 @@ public class Node {
     private static <T extends Remote> void rebind(Class<T> type, T obj, int port) throws IOException {
         Remote remote = UnicastRemoteObject.exportObject(obj, port);
         String name = name(config.nodeId, type);
-        System.out.println("activating service: "+name);
+        System.out.println("activating service: " + name);
         registry.rebind(name, remote);
     }
 
@@ -225,8 +225,8 @@ public class Node {
         }
 
         @Override
-        public boolean updateStatus(TaskAttemptStatus[] statuses) throws IOException {
-            return getDelegate().updateStatus(statuses);
+        public boolean updateStatus(NodeID nodeId, TaskAttemptStatus[] statuses) throws IOException {
+            return getDelegate().updateStatus(nodeId, statuses);
         }
 
         @Override

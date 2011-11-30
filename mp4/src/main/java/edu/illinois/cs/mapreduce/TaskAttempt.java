@@ -8,49 +8,33 @@ import java.io.Serializable;
  * 
  * @author benjamin
  */
-public class TaskAttempt implements Serializable {
+public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implements Serializable {
 
     private static final long serialVersionUID = -1954349780451419520L;
 
-    // the ID of the node on which the task is attempted
-    private final NodeID nodeID;
-    // state owned by job
-    private final Path jarPath;
-    private final JobDescriptor descriptor;
-
     // state owned by task attempt
-    private final TaskAttemptID id;
-    private final Path outputPath;
-    private final TaskAttemptStatus status;
+    protected final Path outputPath;
+    protected String message;
+    // the ID of the node on which the task is attempted
+    protected final NodeID targetNodeID;
+    // state owned by job
+    protected final Path jarPath;
+    protected final JobDescriptor descriptor;
 
-    public TaskAttempt(TaskAttemptID id,
-                       NodeID nodeID,
-                       Path jarPath,
-                       JobDescriptor descriptor,
-                       Path outputPath) {
-        this.nodeID = nodeID;
+    public TaskAttempt(TaskAttemptID id, NodeID targetNodeID, Path jarPath, JobDescriptor descriptor, Path outputPath) {
+        super(id);
+        this.targetNodeID = targetNodeID;
         this.jarPath = jarPath;
         this.descriptor = descriptor;
-        this.id = id;
         this.outputPath = outputPath;
-        this.status = new TaskAttemptStatus(id, nodeID);
-    }
-
-    public TaskAttempt(TaskAttempt attempt) {
-        this.nodeID = attempt.nodeID;
-        this.jarPath = attempt.jarPath;
-        this.descriptor = attempt.descriptor;
-        this.id = attempt.id;
-        this.outputPath = attempt.outputPath;
-        this.status = new TaskAttemptStatus(attempt.status);
     }
 
     public boolean isMap() {
         return id.getParentID().isMap();
     }
 
-    public NodeID getNodeID() {
-        return nodeID;
+    public NodeID getTargetNodeID() {
+        return targetNodeID;
     }
 
     public Path getJarPath() {
@@ -61,32 +45,26 @@ public class TaskAttempt implements Serializable {
         return descriptor;
     }
 
-    public TaskAttemptID getId() {
-        return id;
-    }
-
-    public TaskAttemptStatus getStatus() {
-        return status;
-    }
-
     public Path getOutputPath() {
         return outputPath;
     }
 
+    public synchronized void setFailed(String message) {
+        this.state = State.FAILED;
+        this.message = message;
+    }
+
+    public synchronized boolean updateStatus(TaskAttemptStatus newStatus) {
+        if (state == newStatus.getState())
+            return false;
+        state = newStatus.getState();
+        message = newStatus.getMessage();
+        return true;
+    }
+
     @Override
-    public String toString() {
-        return "TaskAttempt [nodeID=" + nodeID
-            + ", jarPath="
-            + jarPath
-            + ", descriptor="
-            + descriptor
-            + ", id="
-            + id
-            + ", outputPath="
-            + outputPath
-            + ", status="
-            + status
-            + "]";
+    public synchronized TaskAttemptStatus toImmutableStatus() {
+        return new TaskAttemptStatus(id, state, targetNodeID, message);
     }
 
 }

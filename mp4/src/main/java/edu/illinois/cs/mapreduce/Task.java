@@ -1,13 +1,10 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import edu.illinois.cs.mapreduce.Status.State;
 
 /**
  * A Task is an independent partition of a Job that can be scheduled on nodes on
@@ -15,54 +12,65 @@ import edu.illinois.cs.mapreduce.Status.State;
  * 
  * @author benjamin
  */
-public class Task<T extends TaskAttempt> implements Serializable {
+public class Task<T extends TaskAttempt> extends Status<TaskID, TaskStatus> implements Serializable {
 
     private static final long serialVersionUID = -6364601903551472322L;
 
-    // immutable state
-    private final TaskID id;
-    // mutable state
-    private final AtomicInteger counter;
+    private final AtomicInteger attemptCounter;
     private final Map<TaskAttemptID, T> attempts;
-    private final TaskStatus status;
 
     public Task(TaskID id) {
-        this.id = id;
-        this.status = new TaskStatus(id);
-        this.counter = new AtomicInteger();
+        super(id);
+        this.attemptCounter = new AtomicInteger();
         this.attempts = new TreeMap<TaskAttemptID, T>(ID.<TaskAttemptID> getValueComparator());
     }
 
-    public TaskID getId() {
-        return id;
-    }
-
     public int nextAttemptID() {
-        return counter.incrementAndGet();
+        return attemptCounter.incrementAndGet();
     }
 
     public synchronized void addAttempt(T attempt) {
         attempts.put(attempt.getId(), attempt);
-        status.addAttemptStatus(attempt.getStatus());
     }
 
     public synchronized TaskAttempt getAttempt(TaskAttemptID attemptId) {
         return attempts.get(attemptId);
     }
 
-    public synchronized List<T> getAttempts() {
-        return new ArrayList<T>(attempts.values());
+    public synchronized T getSuccessfulAttempt() {
+        for (T attempt : attempts.values())
+            if (attempt.getState() == State.SUCCEEDED)
+                return attempt;
+        return null;
     }
 
-    public synchronized TaskStatus getStatus() {
-        return status;
+    @Override
+    public synchronized TaskStatus toImmutableStatus() {
+        return new TaskStatus(id, state, toAttemptStatuses(attempts));
     }
 
-    public synchronized boolean updateStatus() {
-        State oldState = status.getState();
+    private static Iterable<TaskAttemptStatus> toAttemptStatuses(Map<TaskAttemptID, ? extends TaskAttempt> attempts) {
+        TaskAttemptStatus[] attemptStatuses = new TaskAttemptStatus[attempts.size()];
+        int i = 0;
+        for (TaskAttempt attempt : attempts.values())
+            attemptStatuses[i++] = attempt.toImmutableStatus();
+        return Arrays.asList(attemptStatuses);
+    }
+
+    public synchronized boolean updateStatus(TaskAttemptStatus[] statuses, int offset, int length) {
+        boolean stateChange = false;
+        for (int i = offset; i < offset + length; i++) {
+            TaskAttemptStatus status = statuses[i];
+            TaskAttempt attempt = attempts.get(status.getId());
+            stateChange |= attempt.updateStatus(status);
+        }
+        return stateChange ? updateStatus() : stateChange;
+    }
+
+    private synchronized boolean updateStatus() {
         State newState = computeState();
-        if (oldState != newState) {
-            status.setState(newState);
+        if (state != newState) {
+            state = newState;
             return true;
         }
         return false;
@@ -88,7 +96,7 @@ public class Task<T extends TaskAttempt> implements Serializable {
         State last = null;
         boolean running = false, waiting = false, created = false;
         for (TaskAttempt attempt : attempts.values()) {
-            State state = attempt.getStatus().getState();
+            State state = attempt.getState();
             switch (state) {
                 case SUCCEEDED:
                     return State.SUCCEEDED;
@@ -113,4 +121,5 @@ public class Task<T extends TaskAttempt> implements Serializable {
             return State.CREATED;
         return last;
     }
+
 }

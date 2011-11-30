@@ -2,31 +2,28 @@ package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 
+import edu.illinois.cs.mapreduce.Status.State;
+
 /**
  * thread safe
  * 
  * @author benjamin
  */
-public class TaskAttemptStatus extends Status<TaskAttemptID> implements Serializable {
+public class TaskAttemptStatus extends ImmutableStatus<TaskAttemptID> implements Serializable {
 
     private static final long serialVersionUID = -52586956350693369L;
 
-    private final NodeID onNodeID;
-    private String message;
+    private final NodeID targetNodeID;
+    private final String message;
 
-    public TaskAttemptStatus(TaskAttemptID id, NodeID nodeID) {
-        super(id);
-        this.onNodeID = nodeID;
+    public TaskAttemptStatus(TaskAttemptID id, State state, NodeID targetNodeID, String message) {
+        super(id, state);
+        this.targetNodeID = targetNodeID;
+        this.message = message;
     }
 
-    public TaskAttemptStatus(TaskAttemptStatus status) {
-        super(status);
-        this.onNodeID = status.getOnNodeID();
-        this.message = status.getMessage();
-    }
-
-    public NodeID getOnNodeID() {
-        return onNodeID;
+    public NodeID getTargetNodeID() {
+        return targetNodeID;
     }
 
     public NodeID getNodeID() {
@@ -41,17 +38,8 @@ public class TaskAttemptStatus extends Status<TaskAttemptID> implements Serializ
         return id.getParentID();
     }
 
-    public synchronized void setMessage(String message) {
-        this.message = message;
-    }
-
-    public synchronized String getMessage() {
+    public String getMessage() {
         return message;
-    }
-
-    @Override
-    public String toString() {
-        return "TaskAttemptStatus [id=" + id.toQualifiedString() + ", message=" + message + ", state=" + getState() + "]";
     }
 
 }

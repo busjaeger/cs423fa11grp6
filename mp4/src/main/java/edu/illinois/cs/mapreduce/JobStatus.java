@@ -1,58 +1,41 @@
 package edu.illinois.cs.mapreduce;
 
-import java.util.ArrayList;
-import java.util.List;
+import edu.illinois.cs.mapreduce.Job.Phase;
+import edu.illinois.cs.mapreduce.Status.State;
 
 /**
  * thread safe
  * 
  * @author benjamin
  */
-public class JobStatus extends Status<JobID> {
+public class JobStatus extends ImmutableStatus<JobID> {
 
     private static final long serialVersionUID = 387393472618054102L;
 
-    public static enum Phase {
-        MAP, REDUCE
+    private final Phase phase;
+    private final Iterable<TaskStatus> mapTaskStatuses;
+    private final Iterable<TaskStatus> reduceTaskStatuses;
+
+    public JobStatus(JobID id,
+                     State state,
+                     Phase phase,
+                     Iterable<TaskStatus> mapTaskStatuses,
+                     Iterable<TaskStatus> reduceTaskStatuses) {
+        super(id, state);
+        this.phase = phase;
+        this.mapTaskStatuses = mapTaskStatuses;
+        this.reduceTaskStatuses = reduceTaskStatuses;
     }
 
-    private Phase phase;
-    private final List<TaskStatus> tasks;
-
-    public JobStatus(JobID id) {
-        super(id);
-        this.phase = Phase.MAP;
-        this.tasks = new ArrayList<TaskStatus>();
-    }
-
-    // must be called with lock held
-    public JobStatus(JobStatus jobStatus) {
-        super(jobStatus);
-        this.phase = jobStatus.getPhase();
-        this.tasks = jobStatus.getTaskStatuses();
-        for (int i = 0; i < tasks.size(); i++)
-            tasks.set(i, new TaskStatus(tasks.get(i)));
-    }
-
-    public synchronized Phase getPhase() {
+    public Phase getPhase() {
         return phase;
     }
 
-    synchronized void setPhase(Phase phase) {
-        this.phase = phase;
+    public Iterable<TaskStatus> getMapTaskStatuses() {
+        return mapTaskStatuses;
     }
 
-    public synchronized List<TaskStatus> getTaskStatuses() {
-        return new ArrayList<TaskStatus>(tasks);
+    public Iterable<TaskStatus> getReduceTaskStatuses() {
+        return reduceTaskStatuses;
     }
-
-    synchronized void addTaskStatus(TaskStatus taskStatus) {
-        tasks.add(taskStatus);
-    }
-
-    @Override
-    public String toString() {
-        return "JobStatus [phase=" + phase + ", tasks=" + tasks + "]";
-    }
-
 }

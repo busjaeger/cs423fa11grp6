@@ -66,14 +66,15 @@ public class Console {
                 System.out.println("Job " + job.getId() + " status:");
                 System.out.println("  State:" + job.getState());
                 System.out.println("  Phase:" + job.getPhase());
-                for (TaskStatus task : job.getTaskStatuses()) {
+                for (TaskStatus task : job.getMapTaskStatuses()) {
                     System.out.println("  Task " + task.getId());
                     System.out.println("    State:" + task.getState());
                     for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
                         System.out.println("   Attempt " + attempt.getId() + ":");
-                        System.out.println("     On Node:" + attempt.getOnNodeID());
+                        System.out.println("     Running on Node:" + attempt.getTargetNodeID());
                         System.out.println("     State:" + attempt.getState());
-                        System.out.println("     Message:" + attempt.getMessage());
+                        if (attempt.getMessage() != null)
+                            System.out.println("     Message:" + attempt.getMessage());
                     }
                 }
         }

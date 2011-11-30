@@ -9,7 +9,7 @@ import java.util.EnumSet;
  * @author benjamin
  * @param <T>
  */
-public class Status<T extends ID<T>> implements Serializable {
+public abstract class Status<T extends ID<T>, I extends ImmutableStatus<T>> implements Serializable {
 
     private static final long serialVersionUID = 682178835833949654L;
 
@@ -20,14 +20,10 @@ public class Status<T extends ID<T>> implements Serializable {
     private static EnumSet<State> END_STATES = EnumSet.of(State.FAILED, State.CANCELED, State.SUCCEEDED);
 
     protected final T id;
-    private State state;
+    protected State state;
 
     public Status(T id) {
         this(id, State.CREATED);
-    }
-
-    protected Status(Status<T> status) {
-        this(status.getId(), status.getState());
     }
 
     private Status(T id, State state) {
@@ -39,11 +35,11 @@ public class Status<T extends ID<T>> implements Serializable {
         return id;
     }
 
-    synchronized public State getState() {
+    public synchronized State getState() {
         return state;
     }
 
-    synchronized void setState(State state) {
+    public synchronized void setState(State state) {
         this.state = state;
     }
 
@@ -51,4 +47,5 @@ public class Status<T extends ID<T>> implements Serializable {
         return END_STATES.contains(state);
     }
 
+    public abstract I toImmutableStatus();
 }
