@@ -30,6 +30,6 @@ public interface JobManagerService extends Remote {
      * @return TODO
      * @throws IOException
      */
-    boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses) throws IOException;
+    boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException;
 
 }

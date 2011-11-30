@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Timer;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,15 +46,26 @@ class TaskExecutor implements TaskExecutorService {
     private Cluster cluster;
     private final ExecutorService executorService;
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
+    
+    // Hardware Monitor 
+    private double throttle;
+    private int intervalCheckCpuUtil;
+    private Timer timer;
+    private HardwareMonitorTask hwMonitor;
 
     TaskExecutor(NodeID nodeId, int numThreads) {
         this.nodeId = nodeId;
         this.executorService = Executors.newFixedThreadPool(numThreads);
         this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
+        this.throttle = 0.5; //TODO: set via config or this acceptable default?
+        this.intervalCheckCpuUtil = 5000; //TODO set via config?
+        this.timer = new Timer();
     }
 
     public void start(Cluster cluster) {
         this.cluster = cluster;
+        this.hwMonitor = new HardwareMonitorTask();
+        this.timer.schedule(hwMonitor, 0, this.intervalCheckCpuUtil);
         new Thread(new StatusUpdater()).start();
     }
 
@@ -117,6 +129,12 @@ class TaskExecutor implements TaskExecutorService {
         return true;
     }
 
+    @Override
+	public void setThrottle(double value) throws IOException {
+		this.throttle = value;
+		
+	}
+    
     private class StatusUpdater implements Runnable {
         @Override
         public void run() {
@@ -140,7 +158,7 @@ class TaskExecutor implements TaskExecutorService {
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     try {
-                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]));
+                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]), new TaskExecutorStatus(hwMonitor.getCpuUtil(), 0/*TODO where get queue length?*/, throttle));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }

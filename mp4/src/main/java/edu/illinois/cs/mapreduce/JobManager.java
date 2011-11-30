@@ -221,7 +221,7 @@ public class JobManager implements JobManagerService {
      * contract requires that attempt status objects be sorted by id.
      */
     @Override
-    public boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses) throws IOException {
+    public boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException {
         boolean stateChange = false;
         if (statuses.length > 0) {
             int offset = 0, len = 1;

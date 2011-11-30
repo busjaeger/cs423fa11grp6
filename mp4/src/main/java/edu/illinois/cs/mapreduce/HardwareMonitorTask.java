@@ -56,20 +56,19 @@ public class HardwareMonitorTask extends TimerTask {
             // System.out.println("totaltime: " + totalTime + " idletime: " +
             // idleTime);
             double interval = totalTime - currentTotal;
-            double idlediff = idleTime - currentIdle;
-            double percent = (idlediff / interval) * 100;
-            // System.out.println("percent idle: " + percent + " in last: " +
-            // interval + " jiffies");
-            this.cpuUtil = percent;
-            currentIdle = idleTime;
-            currentTotal = totalTime;
-        } catch (FileNotFoundException e1) {
-            System.out.println("HardwareMonitorTask, File Not Found: " + this.file);
-            e1.printStackTrace();
-        } catch (IOException e) {
-            System.out.println("HardwareMonitorTask, IOException.");
-            e.printStackTrace();
-        }
-    }
+			double idlediff = idleTime - currentIdle;
+			double percent = 100.0 - ((idlediff / interval) * 100);
+			//System.out.println("percent not idle: " + percent + " in last: " + interval + " jiffies");
+			this.cpuUtil = percent;
+			currentIdle = idleTime;
+			currentTotal = totalTime;
+		} catch (FileNotFoundException e1) {
+			System.out.println("HardwareMonitorTask, File Not Found: " + this.file);
+			e1.printStackTrace();
+		} catch (IOException e) {
+			System.out.println("HardwareMonitorTask, IOException.");
+			e.printStackTrace();
+		}
+	}	
 
 }

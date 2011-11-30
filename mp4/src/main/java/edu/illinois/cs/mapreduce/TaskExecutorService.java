@@ -43,5 +43,7 @@ public interface TaskExecutorService extends Remote {
      * @throws IOException
      */
     boolean delete(TaskAttemptID id) throws IOException;
+    
+    void setThrottle(double value) throws IOException;
 
 }

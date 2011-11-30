@@ -8,7 +8,7 @@ import java.rmi.RemoteException;
 public class Console {
 
     static enum Command {
-        SUBMIT_JOB("submit-job"), JOB_STATUS("job-status");
+        SUBMIT_JOB("submit-job"), JOB_STATUS("job-status"), SET_THROTTLE("set-throttle");
         private final String string;
 
         private Command(String string) {
@@ -42,7 +42,7 @@ public class Console {
         String cfgPath = args.length > 2 && args[args.length - 2].equals("-config") ? args[args.length - 1] : null;
         Node.init(cfgPath);
         JobManagerService jobManager = Node.lookup(Node.config.nodeId, JobManagerService.class);
-
+        TaskExecutorService taskExecutor = Node.lookup(Node.config.nodeId, TaskExecutorService.class);
         switch (cmd) {
             case SUBMIT_JOB:
                 if (args.length < 3) {
@@ -77,6 +77,30 @@ public class Console {
                             System.out.println("     Message:" + attempt.getMessage());
                     }
                 }
+                break;
+            case SET_THROTTLE:
+            	if (args.length < 2) {
+            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+            		printUsage();
+            		System.exit(1);
+            	} 
+            	int newThrottleValue = 0;
+            	try {
+            		newThrottleValue = Integer.parseInt(args[1]);
+            	} catch (Exception e) {
+            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+            		printUsage();
+            		e.printStackTrace();
+            		System.exit(1);
+            	}
+            	if (newThrottleValue < 0 || newThrottleValue > 100) {
+            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+            		printUsage();
+            		System.exit(1);
+            	}
+            	taskExecutor.setThrottle((double)newThrottleValue);
+            	System.out.println("Throttle value set " + newThrottleValue);
+                
         }
     }
 
@@ -84,5 +108,6 @@ public class Console {
         System.out.println("usage:");
         System.out.println("submit-job {job-jar-file} {input-file-path} [-config {config-file}]");
         System.out.println("job-status {job-id} [-config {config-file}]");
+        System.out.println("set-throttle {integer-value 0-100}");
     }
 }

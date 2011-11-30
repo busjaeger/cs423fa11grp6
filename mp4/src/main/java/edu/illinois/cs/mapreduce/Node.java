@@ -212,6 +212,12 @@ public class Node {
         public boolean delete(TaskAttemptID id) throws IOException {
             return getDelegate().delete(id);
         }
+        
+        @Override
+		public void setThrottle(double value) throws IOException {
+			getDelegate().setThrottle(value);
+			
+		}
     }
 
     static class LazyJobManagerService extends LazyProxy<JobManagerService> implements JobManagerService {
@@ -225,8 +231,8 @@ public class Node {
         }
 
         @Override
-        public boolean updateStatus(NodeID nodeId, TaskAttemptStatus[] statuses) throws IOException {
-            return getDelegate().updateStatus(nodeId, statuses);
+        public boolean updateStatus(NodeID nodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException {
+            return getDelegate().updateStatus(nodeId, statuses, status);
         }
 
         @Override
