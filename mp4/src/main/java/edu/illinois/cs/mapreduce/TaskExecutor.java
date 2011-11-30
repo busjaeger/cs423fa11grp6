@@ -13,8 +13,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import com.sun.corba.se.impl.orbutil.threadpool.TimeoutException;
 
 class TaskExecutor implements TaskExecutorService {
 

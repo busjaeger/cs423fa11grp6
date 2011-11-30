@@ -3,8 +3,8 @@ package edu.illinois.cs.mapreduce;
 import java.io.IOException;
 import java.rmi.Remote;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import com.sun.corba.se.impl.orbutil.threadpool.TimeoutException;
 
 /**
  * Remote interface to TakManager
