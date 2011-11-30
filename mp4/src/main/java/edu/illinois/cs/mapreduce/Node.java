@@ -35,6 +35,8 @@ public class Node {
 
     public static NodeConfiguration config;
     private static Registry registry;
+    private static ProxyRegistry proxyRegistry;
+    private static FileSystemServiceAdapter adapter;
 
     public static void main(String[] args) throws IOException {
         String path = args.length > 1 && args[0].equals("-config") ? args[1] : null;
@@ -66,7 +68,13 @@ public class Node {
         taskExecutor.start(cluster);
         jobManager.start(cluster);
 
-        rebind(RemoteFileSystem.class, new FileSystemServiceAdapter(fileSystem), config.fsPort);
+        if ("localhost".equals(config.registryHost)) {
+            proxyRegistry = new ProxyRegistryImpl();
+            Remote remote = UnicastRemoteObject.exportObject(proxyRegistry, 1100);
+            registry.rebind(ProxyRegistry.class.getName(), remote);
+        }
+
+        rebind(RemoteFileSystem.class, adapter = new FileSystemServiceAdapter(fileSystem), config.fsPort);
         rebind(TaskExecutorService.class, taskExecutor, config.tePort);
         rebind(JobManagerService.class, jobManager, config.jmPort);
 
@@ -92,17 +100,37 @@ public class Node {
         Remote remote = UnicastRemoteObject.exportObject(obj, port);
         String name = name(config.nodeId, type);
         System.out.println("activating service: " + name);
-        registry.rebind(name, remote);
+        if ("localhost".equals(config.registryHost)) {
+            registry.rebind(name, remote);
+        } else {
+            ProxyRegistry proxyRegistry = lookup(null, ProxyRegistry.class);
+            proxyRegistry.rebind(name, obj, port);
+        }
     }
 
     private static String name(NodeID nodeId, Class<?> type) {
-        return "/" + nodeId + "/" + type.getName();
+        return nodeId == null ? type.getName() : "/" + nodeId + "/" + type.getName();
     }
 
     private static <K, V> Map<K, V> newMap(K key, V value) {
         Map<K, V> map = new HashMap<K, V>();
         map.put(key, value);
         return map;
+    }
+
+    // RMI hack to allow distributed registry
+    public interface ProxyRegistry extends Remote {
+        public void rebind(String name, Remote obj, int port) throws IOException;
+    }
+
+    public static class ProxyRegistryImpl implements ProxyRegistry {
+        private final java.util.List<Remote> remotes = new ArrayList<Remote>();
+        @Override
+        public void rebind(String name, Remote obj, int port) throws IOException {
+            remotes.add(obj);
+            Remote remote = UnicastRemoteObject.exportObject(obj, port);
+            LocateRegistry.getRegistry().rebind(name, remote);
+        }
     }
 
     /*

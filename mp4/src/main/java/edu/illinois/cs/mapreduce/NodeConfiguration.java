@@ -35,7 +35,7 @@ public class NodeConfiguration {
     public static NodeConfiguration load(Properties props) {
         NodeID nodeId = toNodeID(props.getProperty("node.id", "1"));
         List<NodeID> remoteNodeIds = getNodeIDs(props, "node.remote.ids");
-        String registryHost = props.getProperty("node.rmi.registry.host", "localhost");
+        String registryHost = props.getProperty("node.rmi.registry.host");
         int registryPort = toPort(props.getProperty("node.registry.port", "1099"));
 
         File fsRootDir = new File(props.getProperty("fs.root.dir", "/tmp/node1"));
