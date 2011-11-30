@@ -221,15 +221,15 @@ public class JobManager implements JobManagerService {
      * contract requires that attempt status objects be sorted by id.
      */
     @Override
-    public boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException {
+    public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] taskStatuses) throws IOException {
         boolean stateChange = false;
-        if (statuses.length > 0) {
+        if (taskStatuses.length > 0) {
             int offset = 0, len = 1;
-            JobID jobId = statuses[0].getJobID();
-            for (int i = 1; i < statuses.length; i++) {
-                JobID current = statuses[i].getJobID();
+            JobID jobId = taskStatuses[0].getJobID();
+            for (int i = 1; i < taskStatuses.length; i++) {
+                JobID current = taskStatuses[i].getJobID();
                 if (!current.equals(jobId)) {
-                    stateChange |= updateJobStatus(jobId, statuses, offset, len);
+                    stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
                     offset = i;
                     len = 1;
                     jobId = current;
@@ -237,7 +237,7 @@ public class JobManager implements JobManagerService {
                     len++;
                 }
             }
-            stateChange |= updateJobStatus(jobId, statuses, offset, len);
+            stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
         }
         return stateChange;
     }

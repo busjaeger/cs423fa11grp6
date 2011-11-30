@@ -24,12 +24,12 @@ public interface JobManagerService extends Remote {
     JobStatus getJobStatus(JobID jobID) throws IOException;
 
     /**
-     * must be sorted by {@link TaskAttemptID}
      * 
-     * @param statuses
-     * @return TODO
+     * @param status
+     * @param statuses  must be sorted by {@link TaskAttemptID}
+     * @return
      * @throws IOException
      */
-    boolean updateStatus(NodeID srcNodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException;
+    boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] statuses) throws IOException;
 
 }

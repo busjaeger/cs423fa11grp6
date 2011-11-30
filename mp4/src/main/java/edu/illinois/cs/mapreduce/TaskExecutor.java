@@ -46,8 +46,8 @@ class TaskExecutor implements TaskExecutorService {
     private Cluster cluster;
     private final ExecutorService executorService;
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
-    
-    // Hardware Monitor 
+
+    // Hardware Monitor
     private double throttle;
     private int intervalCheckCpuUtil;
     private Timer timer;
@@ -57,8 +57,8 @@ class TaskExecutor implements TaskExecutorService {
         this.nodeId = nodeId;
         this.executorService = Executors.newFixedThreadPool(numThreads);
         this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
-        this.throttle = 0.5; //TODO: set via config or this acceptable default?
-        this.intervalCheckCpuUtil = 5000; //TODO set via config?
+        this.throttle = 0.5; // TODO: set via config or this acceptable default?
+        this.intervalCheckCpuUtil = 5000; // TODO set via config?
         this.timer = new Timer();
     }
 
@@ -71,7 +71,7 @@ class TaskExecutor implements TaskExecutorService {
 
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
-        Semaphore completion = new Semaphore(0); 
+        Semaphore completion = new Semaphore(0);
         TaskRunner runner = new TaskRunner(nodeId, task, completion, cluster);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
@@ -130,11 +130,11 @@ class TaskExecutor implements TaskExecutorService {
     }
 
     @Override
-	public void setThrottle(double value) throws IOException {
-		this.throttle = value;
-		
-	}
-    
+    public void setThrottle(double value) throws IOException {
+        this.throttle = value;
+
+    }
+
     private class StatusUpdater implements Runnable {
         @Override
         public void run() {
@@ -157,8 +157,11 @@ class TaskExecutor implements TaskExecutorService {
                 }
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
+                    TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
+                    TaskExecutorStatus status =
+                        new TaskExecutorStatus(nodeId, hwMonitor.getCpuUtil(), executions.size(), throttle);
                     try {
-                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]), new TaskExecutorStatus(hwMonitor.getCpuUtil(), executions.size(), throttle));
+                        jobManager.updateStatus(status, statuses);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }

@@ -231,8 +231,8 @@ public class Node {
         }
 
         @Override
-        public boolean updateStatus(NodeID nodeId, TaskAttemptStatus[] statuses, TaskExecutorStatus status) throws IOException {
-            return getDelegate().updateStatus(nodeId, statuses, status);
+        public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] statuses) throws IOException {
+            return getDelegate().updateStatus(status, statuses);
         }
 
         @Override
