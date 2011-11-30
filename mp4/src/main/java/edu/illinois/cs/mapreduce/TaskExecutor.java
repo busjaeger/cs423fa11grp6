@@ -71,7 +71,7 @@ class TaskExecutor implements TaskExecutorService {
 
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
-        Semaphore completion = new Semaphore(0);
+        Semaphore completion = new Semaphore(0); 
         TaskRunner runner = new TaskRunner(nodeId, task, completion, cluster);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
@@ -158,7 +158,7 @@ class TaskExecutor implements TaskExecutorService {
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
                     try {
-                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]), new TaskExecutorStatus(hwMonitor.getCpuUtil(), 0/*TODO where get queue length?*/, throttle));
+                        jobManager.updateStatus(nodeId, entry.getValue().toArray(new TaskAttemptStatus[0]), new TaskExecutorStatus(hwMonitor.getCpuUtil(), executions.size(), throttle));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
