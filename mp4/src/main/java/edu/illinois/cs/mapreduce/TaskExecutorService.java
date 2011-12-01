@@ -1,9 +1,10 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.IOException;
-import java.rmi.Remote;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import edu.illinois.cs.mapreduce.Node.NodeService;
 
 
 /**
@@ -11,7 +12,7 @@ import java.util.concurrent.TimeoutException;
  * 
  * @author benjamin
  */
-public interface TaskExecutorService extends Remote {
+public interface TaskExecutorService extends NodeService {
 
     /**
      * Execute the given task attempt through this executor service

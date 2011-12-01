@@ -4,9 +4,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
@@ -34,23 +34,18 @@ public class NodeConfiguration {
 
     public static NodeConfiguration load(Properties props) {
         NodeID nodeId = toNodeID(props.getProperty("node.id", "1"));
-        List<NodeID> remoteNodeIds = getNodeIDs(props, "node.remote.ids");
-        String registryHost = props.getProperty("node.rmi.registry.host", "localhost");
-        int registryPort = toPort(props.getProperty("node.registry.port", "1099"));
+        int port = toPort(props.getProperty("node.port", "60001"));
+        Map<NodeID, Endpoint> nodeMap = getNodeMap(props, "node.peers");
 
         File fsRootDir = new File(props.getProperty("fs.root.dir", "/tmp/node1"));
-        int fsPort = toPort(props.getProperty("fs.rmi.port", "60001"));
 
-        int jmPort = toPort(props.getProperty("jm.rmi.port", "60002"));
-
-        int tePort = toPort(props.getProperty("te.rmi.port", "60003"));
         int teNumThreads = toPositiveInt(props.getProperty("te.num.threads", "1"));
         double teThrottle = Double.parseDouble(props.getProperty("te.throttle", "0.0"));
         int teStatusUpdateInterval = toPositiveInt(props.getProperty("te.status.update.interval", "5000"));
         int teCpuProfilingInterval = toPositiveInt(props.getProperty("te.cpu.profiling.interval", "5000"));
 
-        return new NodeConfiguration(nodeId, remoteNodeIds, registryHost, registryPort, jmPort, tePort, teNumThreads,
-                                     teThrottle, teStatusUpdateInterval, teCpuProfilingInterval, fsPort, fsRootDir);
+        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, teStatusUpdateInterval,
+                                     teCpuProfilingInterval, fsRootDir);
     }
 
     private static int toPort(String value) {
@@ -60,12 +55,18 @@ public class NodeConfiguration {
         return port;
     }
 
-    private static List<NodeID> getNodeIDs(Properties props, String key) {
+    private static Map<NodeID, Endpoint> getNodeMap(Properties props, String key) {
         StringTokenizer tokenizer = new StringTokenizer(props.getProperty(key));
-        List<NodeID> list = new ArrayList<NodeID>();
-        while (tokenizer.hasMoreTokens())
-            list.add(toNodeID(tokenizer.nextToken()));
-        return Collections.unmodifiableList(list);
+        Map<NodeID, Endpoint> map = new HashMap<NodeID, Endpoint>();
+        while (tokenizer.hasMoreTokens()) {
+            String node = tokenizer.nextToken();
+            String[] parts = node.split(":");
+            NodeID nodeId = toNodeID(parts[0]);
+            String host = parts[1];
+            int port = toPort(parts[2]);
+            map.put(nodeId, new Endpoint(host, port));
+        }
+        return Collections.unmodifiableMap(map);
     }
 
     private static int toPositiveInt(String s) {
@@ -79,49 +80,45 @@ public class NodeConfiguration {
         return new NodeID(toPositiveInt(s));
     }
 
+    static class Endpoint {
+        public final String host;
+        public final int port;
+
+        public Endpoint(String host, int port) {
+            this.host = host;
+            this.port = port;
+        }
+    }
+
     // node configuration
     public final NodeID nodeId;
-    public final List<NodeID> remoteNodeIds;
-    public final String registryHost;
-    public final int registryPort;
-
-    // job manager configuration
-    public final int jmPort;
+    public final int port;
+    public final Map<NodeID, Endpoint> nodeMap;
 
     // task executor configuration
-    public final int tePort;
     public final int teNumThreads;
     public final double teThrottle;
     public final int teStatusUpdateInterval;
     public final int teCpuProfilingInterval;
 
     // file system configuration
-    public final int fsPort;
     public final File fsRootDir;
 
-    NodeConfiguration(NodeID nodeId,
-                      List<NodeID> remoteNodeIds,
-                      String registryHost,
-                      int registryPort,
-                      int jmPort,
-                      int tePort,
-                      int teNumThreads,
-                      double teThrottle,
-                      int teStatusUpdateInterval,
-                      int teCpuProfilingInterval,
-                      int fsPort,
-                      File fsRootDir) {
+    public NodeConfiguration(NodeID nodeId,
+                             int port,
+                             Map<NodeID, Endpoint> remoteNodes,
+                             int teNumThreads,
+                             double teThrottle,
+                             int teStatusUpdateInterval,
+                             int teCpuProfilingInterval,
+                             File fsRootDir) {
         this.nodeId = nodeId;
-        this.remoteNodeIds = remoteNodeIds;
-        this.registryHost = registryHost;
-        this.registryPort = registryPort;
-        this.jmPort = jmPort;
-        this.tePort = tePort;
+        this.port = port;
+        this.nodeMap = remoteNodes;
         this.teNumThreads = teNumThreads;
         this.teThrottle = teThrottle;
         this.teStatusUpdateInterval = teStatusUpdateInterval;
         this.teCpuProfilingInterval = teCpuProfilingInterval;
-        this.fsPort = fsPort;
         this.fsRootDir = fsRootDir;
     }
 

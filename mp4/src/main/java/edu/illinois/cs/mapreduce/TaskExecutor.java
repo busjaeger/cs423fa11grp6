@@ -15,7 +15,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-
 class TaskExecutor implements TaskExecutorService {
 
     private static class TaskAttemptExecution {
@@ -42,33 +41,41 @@ class TaskExecutor implements TaskExecutorService {
         }
     }
 
-    private final NodeID nodeId;
-    private Cluster cluster; // quasi immutable
+    private final NodeConfiguration config;
     private final ThreadPoolExecutor executorService;
     private final int cpuProfilingInterval;
     private final int statusUpdateInterval;
     private final Timer timer;
+    private Node node; // quasi immutable
 
     // mutable state
     private final Map<TaskAttemptID, TaskAttemptExecution> executions;
+    private Future<?> statusUpdateFuture;
     private double throttle;
     private double cpuUtilization;
 
-    TaskExecutor(NodeID nodeId, int numThreads, double throttle, int statusUpdateInterval, int cpuProfilingInterval) {
-        this.nodeId = nodeId;
-        this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(numThreads);
+    TaskExecutor(NodeConfiguration config) {
+        this.config = config;
+        this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
         this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
-        this.throttle = throttle;
-        this.cpuProfilingInterval = cpuProfilingInterval;
-        this.statusUpdateInterval = statusUpdateInterval;
+        this.throttle = config.teThrottle;
+        this.cpuProfilingInterval = config.teCpuProfilingInterval;
+        this.statusUpdateInterval = config.teStatusUpdateInterval;
         this.timer = new Timer();
     }
 
-    public void start(Cluster cluster) {
-        this.cluster = cluster;
+    @Override
+    public void start(Node node) {
+        this.node = node;
         HardwareMonitorTask hwMonitor = new HardwareMonitorTask(this);
         this.timer.schedule(hwMonitor, 0, this.cpuProfilingInterval);
-        new Thread(new StatusUpdater()).start();
+        statusUpdateFuture = node.getExecutorService().submit(new StatusUpdater());
+    }
+
+    @Override
+    public void stop() {
+        this.timer.cancel();
+        this.statusUpdateFuture.cancel(true);
     }
 
     @Override
@@ -83,7 +90,7 @@ class TaskExecutor implements TaskExecutorService {
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
         Semaphore completion = new Semaphore(0);
-        TaskRunner runner = new TaskRunner(nodeId, task, completion, cluster);
+        TaskRunner runner = new TaskRunner(task, completion, node);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
             executions.put(task.getId(), new TaskAttemptExecution(future, task, completion));
@@ -127,7 +134,7 @@ class TaskExecutor implements TaskExecutorService {
             TaskExecutorTask task = execution.getTask();
             if (!task.isDone())
                 return false;
-            FileSystemService fileSystem = cluster.getFileSystemService(task.getTargetNodeID());
+            FileSystemService fileSystem = node.getFileSystemService(task.getTargetNodeID());
             Path outputPath = task.getOutputPath();
             synchronized (outputPath) {
                 if (fileSystem.exists(outputPath) && !fileSystem.delete(outputPath))
@@ -147,7 +154,8 @@ class TaskExecutor implements TaskExecutorService {
                 try {
                     Thread.sleep(statusUpdateInterval);
                 } catch (InterruptedException e1) {
-                    e1.printStackTrace();
+                    Thread.currentThread().interrupt();
+                    return;
                 }
                 Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
                 synchronized (executions) {
@@ -163,10 +171,10 @@ class TaskExecutor implements TaskExecutorService {
                 int queueLength = executorService.getQueue().size();
                 TaskExecutorStatus status;
                 synchronized (this) {
-                    status = new TaskExecutorStatus(nodeId, cpuUtilization, queueLength, throttle);
+                    status = new TaskExecutorStatus(config.nodeId, cpuUtilization, queueLength, throttle);
                 }
                 for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
-                    JobManagerService jobManager = cluster.getJobManagerService(entry.getKey());
+                    JobManagerService jobManager = node.getJobManagerService(entry.getKey());
                     TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
                     try {
                         jobManager.updateStatus(status, statuses);

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?><launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
+<listEntry value="/mp4/src/main/java/edu/illinois/cs/mapreduce/NodeConsole.java"/>
+</listAttribute>
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
+<listEntry value="1"/>
+</listAttribute>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.mapreduce.NodeConsole"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="submit-job localhost:60001 ${project_loc:mp4}/src/test/resources/sample/job.jar ${project_loc:mp4}/src/test/resources/sample/rfc2616.txt"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="mp4"/>
+</launchConfiguration>

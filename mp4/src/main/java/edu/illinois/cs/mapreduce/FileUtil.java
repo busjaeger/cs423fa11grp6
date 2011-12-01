@@ -69,6 +69,13 @@ public final class FileUtil {
             throw new IOException("Failed to create directory " + dir.getAbsolutePath());
     }
 
+    /**
+     * Transfers the input stream bytes into the output stream
+     * 
+     * @param is
+     * @param os
+     * @throws IOException
+     */
     public static void transfer(InputStream is, OutputStream os) throws IOException {
         byte[] buf = new byte[4096];
         int read;

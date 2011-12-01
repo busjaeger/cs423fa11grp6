@@ -1,10 +1,9 @@
 package edu.illinois.cs.mapreduce;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URL;
+
+import edu.illinois.cs.mapreduce.Node.NodeService;
 
 /**
  * Interface to either a local or remote file system. This interface provides an
@@ -13,17 +12,11 @@ import java.net.URL;
  * 
  * @author benjamin
  */
-public interface FileSystemService {
-
-    URL toURL(Path jarPath) throws IOException;
+public interface FileSystemService extends NodeService {
 
     InputStream read(Path path) throws IOException;
 
-    OutputStream write(Path path) throws IOException;
-
-    void copy(Path dest, File src) throws IOException;
-
-    void copy(Path dest, InputStream is) throws IOException;
+    void write(Path dest, InputStream is) throws IOException;
 
     boolean mkdir(Path path) throws IOException;
 

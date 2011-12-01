@@ -27,24 +27,22 @@ import edu.illinois.cs.mapreduce.api.Reducer;
 
 class TaskRunner implements Runnable {
 
-    private final NodeID nodeID;
     private final TaskExecutorTask task;
-    private final Cluster cluster;
+    private final Node node;
     private final Semaphore completion;
 
-    private FileSystemService fileSystem;
+    private FileSystem fileSystem;
     private ClassLoader classLoader;
     private JobDescriptor descriptor;
 
-    public TaskRunner(NodeID nodeID, TaskExecutorTask task, Semaphore completion, Cluster cluster) {
-        this.nodeID = nodeID;
+    public TaskRunner(TaskExecutorTask task, Semaphore completion, Node node) {
         this.task = task;
         this.completion = completion;
-        this.cluster = cluster;
+        this.node = node;
     }
 
     private void init() throws IOException {
-        this.fileSystem = cluster.getFileSystemService(nodeID);
+        this.fileSystem = node.getLocalFileSystem();
         Path jarPath = task.getJarPath();
         URL jarURL = fileSystem.toURL(jarPath);
         this.classLoader = ReflectionUtil.createClassLoader(jarURL);
@@ -231,7 +229,7 @@ class TaskRunner implements Runnable {
         List<InputStream> iss = new ArrayList<InputStream>();
         try {
             for (QualifiedPath qPath : inputPaths) {
-                FileSystemService fs = cluster.getFileSystemService(qPath.getNodeId());
+                FileSystemService fs = node.getFileSystemService(qPath.getNodeId());
                 InputStream is = fs.read(qPath.getPath());
                 iss.add(is);
             }

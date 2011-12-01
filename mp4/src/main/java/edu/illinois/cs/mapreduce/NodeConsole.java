@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-public class Console {
+import edu.illinois.cs.mapreduce.Node.NodeServices;
+
+public class NodeConsole {
 
     static enum Command {
         SUBMIT_JOB("submit-job"), JOB_STATUS("job-status"), SET_THROTTLE("set-throttle");
@@ -32,6 +34,8 @@ public class Console {
             printUsage();
             System.exit(1);
         }
+
+        // command
         Command cmd = Command.fromString(args[0]);
         if (cmd == null) {
             System.out.println("unknown command: " + args[0]);
@@ -39,30 +43,32 @@ public class Console {
             System.exit(1);
         }
 
-        String cfgPath = args.length > 2 && args[args.length - 2].equals("-config") ? args[args.length - 1] : null;
-        Node.init(cfgPath);
-        JobManagerService jobManager = Node.lookup(Node.config.nodeId, JobManagerService.class);
-        TaskExecutorService taskExecutor = Node.lookup(Node.config.nodeId, TaskExecutorService.class);
+        // target host:port
+        String[] target = args[1].split(":");
+        String host = target[0];
+        int port = Integer.parseInt(target[1]);
+
+        NodeServices services = RPCClient.newProxy(host, port, NodeServices.class);
         switch (cmd) {
             case SUBMIT_JOB:
-                if (args.length < 3) {
+                if (args.length < 4) {
                     System.out.println("invalid arguments to " + Command.SUBMIT_JOB + " command");
                     printUsage();
                     System.exit(1);
                 }
-                File jobJarFile = new File(args[1]);
-                File inputFile = new File(args[2]);
-                JobID id = jobManager.submitJob(jobJarFile, inputFile);
+                File jobJarFile = new File(args[2]);
+                File inputFile = new File(args[3]);
+                JobID id = services.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id.toQualifiedString());
                 break;
             case JOB_STATUS:
-                if (args.length < 1) {
+                if (args.length < 2) {
                     System.out.println("invalid arguments to " + Command.JOB_STATUS + " command");
                     printUsage();
                     System.exit(1);
                 }
-                JobID jobId = JobID.fromQualifiedString(args[1]);
-                JobStatus job = jobManager.getJobStatus(jobId);
+                JobID jobId = JobID.fromQualifiedString(args[2]);
+                JobStatus job = services.getJobStatus(jobId);
                 System.out.println("Job " + job.getId() + " status:");
                 System.out.println("  State:" + job.getState());
                 System.out.println("  Phase:" + job.getPhase());
@@ -79,28 +85,27 @@ public class Console {
                 }
                 break;
             case SET_THROTTLE:
-            	if (args.length < 2) {
-            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
-            		printUsage();
-            		System.exit(1);
-            	} 
-            	int newThrottleValue = 0;
-            	try {
-            		newThrottleValue = Integer.parseInt(args[1]);
-            	} catch (Exception e) {
-            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
-            		printUsage();
-            		e.printStackTrace();
-            		System.exit(1);
-            	}
-            	if (newThrottleValue < 0 || newThrottleValue > 100) {
-            		System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
-            		printUsage();
-            		System.exit(1);
-            	}
-            	taskExecutor.setThrottle((double)newThrottleValue);
-            	System.out.println("Throttle value set " + newThrottleValue);
-                
+                if (args.length < 3) {
+                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+                    printUsage();
+                    System.exit(1);
+                }
+                int newThrottleValue = 0;
+                try {
+                    newThrottleValue = Integer.parseInt(args[2]);
+                } catch (Exception e) {
+                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+                    printUsage();
+                    e.printStackTrace();
+                    System.exit(1);
+                }
+                if (newThrottleValue < 0 || newThrottleValue > 100) {
+                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+                    printUsage();
+                    System.exit(1);
+                }
+                services.setThrottle((double)newThrottleValue);
+                System.out.println("Throttle value set " + newThrottleValue);
         }
     }
 

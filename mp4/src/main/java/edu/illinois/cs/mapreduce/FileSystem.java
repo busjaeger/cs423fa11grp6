@@ -17,14 +17,19 @@ public class FileSystem implements FileSystemService {
 
     private final File dir;
 
-    public FileSystem(File dir) throws IOException {
+    public FileSystem(NodeConfiguration config) throws IOException {
+        this.dir = config.fsRootDir;
         FileUtil.ensureDirExists(dir);
-        this.dir = dir;
     }
 
     @Override
-    public URL toURL(Path path) throws IOException {
-        return resolve(path).toURI().toURL();
+    public void start(Node node) {
+        // nothing to do
+    }
+
+    @Override
+    public void stop() {
+        // nothing to do
     }
 
     @Override
@@ -34,19 +39,7 @@ public class FileSystem implements FileSystemService {
     }
 
     @Override
-    public OutputStream write(Path dest) throws IOException {
-        File file = resolve(dest);
-        return FileUtil.write(file);
-    }
-
-    @Override
-    public void copy(Path dest, File src) throws IOException {
-        File file = resolve(dest);
-        FileUtil.copy(file, src);
-    }
-
-    @Override
-    public void copy(Path dest, InputStream src) throws IOException {
+    public void write(Path dest, InputStream src) throws IOException {
         File file = resolve(dest);
         FileUtil.copy(file, src);
     }
@@ -67,6 +60,20 @@ public class FileSystem implements FileSystemService {
     public boolean exists(Path path) throws IOException {
         File file = resolve(path);
         return file.exists();
+    }
+
+    public URL toURL(Path path) throws IOException {
+        return resolve(path).toURI().toURL();
+    }
+
+    public OutputStream write(Path dest) throws IOException {
+        File file = resolve(dest);
+        return FileUtil.write(file);
+    }
+
+    public void copy(Path dest, File src) throws IOException {
+        File file = resolve(dest);
+        FileUtil.copy(file, src);
     }
 
     private File resolve(Path path) {

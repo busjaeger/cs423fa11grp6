@@ -2,14 +2,15 @@ package edu.illinois.cs.mapreduce;
 
 import java.io.File;
 import java.io.IOException;
-import java.rmi.Remote;
+
+import edu.illinois.cs.mapreduce.Node.NodeService;
 
 /**
  * A JobManagerService manages the execution of jobs.
  * 
  * @author benjamin
  */
-public interface JobManagerService extends Remote {
+public interface JobManagerService extends NodeService {
 
     /**
      * Submits a job for the given job jar file and input file.

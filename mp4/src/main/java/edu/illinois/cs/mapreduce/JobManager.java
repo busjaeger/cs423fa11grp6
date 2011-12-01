@@ -4,15 +4,17 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import edu.illinois.cs.mapreduce.Job.Phase;
@@ -28,21 +30,25 @@ import edu.illinois.cs.mapreduce.api.Partitioner;
  */
 public class JobManager implements JobManagerService {
 
-    private final NodeID nodeId;
-    private Cluster cluster;
-    private final ExecutorService executorService;
+    private final NodeConfiguration config;
+    private Node node;
     private final AtomicInteger counter;
     private final Map<JobID, Job> jobs;
 
-    JobManager(NodeID id) {
-        this.nodeId = id;
+    JobManager(NodeConfiguration config) {
+        this.config = config;
         this.counter = new AtomicInteger();
         this.jobs = new ConcurrentHashMap<JobID, Job>();
-        this.executorService = Executors.newCachedThreadPool();
     }
 
-    public void start(Cluster cluster) {
-        this.cluster = cluster;
+    @Override
+    public void start(Node node) {
+        this.node = node;
+    }
+
+    @Override
+    public void stop() {
+        // nothing to do
     }
 
     /**
@@ -53,7 +59,7 @@ public class JobManager implements JobManagerService {
     public JobID submitJob(File jarFile, File inputFile) throws IOException {
         // 1. create job
         JobDescriptor descriptor = JobDescriptor.read(jarFile);
-        JobID jobId = new JobID(nodeId, counter.incrementAndGet());
+        JobID jobId = new JobID(config.nodeId, counter.incrementAndGet());
         Job job = new Job(jobId, jarFile.getName(), descriptor);
         jobs.put(jobId, job);
         // 2. submit tasks
@@ -104,10 +110,10 @@ public class JobManager implements JobManagerService {
         InputFormat<?, ?, ?> inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
         InputStream is = new FileInputStream(inputFile);
         try {
-            Partitioner<?> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
+            final Partitioner<?> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
-            List<NodeID> nodeIds = cluster.getNodeIds();
+            List<NodeID> nodeIds = node.getNodeIds();
             MapTask previous = null;
             TaskAttempt previousAttempt = null;
             while (!partitioner.isEOF()) {
@@ -121,18 +127,48 @@ public class JobManager implements JobManagerService {
                 Path inputPath = job.getPath().append(taskId + "-input");
 
                 // 3. write partition to node's file system
-                FileSystemService fs = cluster.getFileSystemService(targetNodeId);
-                OutputStream os = fs.write(inputPath);
+                final FileSystemService fs = node.getFileSystemService(targetNodeId);
+
+                // this complex chunk of code is just to present an output
+                // stream interface to partitioner
                 Partition partition;
+                final PipedOutputStream pos = new PipedOutputStream();
                 try {
-                    partition = partitioner.writePartition(os);
+                    final PipedInputStream pis = new PipedInputStream(pos);
+                    Future<Partition> future = node.getExecutorService().submit(new Callable<Partition>() {
+                        @Override
+                        public Partition call() throws IOException {
+                            return partitioner.writePartition(pos);
+                        }
+                    });
+                    fs.write(inputPath, pis);
+                    try {
+                        partition = future.get();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(e);
+                    } catch (ExecutionException e) {
+                        Throwable t = e.getCause();
+                        if (t instanceof IOException)
+                            throw (IOException)t;
+                        if (t instanceof Error)
+                            throw (Error)t;
+                        if (t instanceof RuntimeException)
+                            throw (RuntimeException)t;
+                        throw new RuntimeException(e);
+                    }
                 } finally {
-                    os.close();
+                    pos.close();
                 }
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(targetNodeId)) {
-                    fs.copy(job.getJarPath(), jarFile);
+                    InputStream fis = new FileInputStream(jarFile);
+                    try {
+                        fs.write(job.getJarPath(), fis);
+                    } finally {
+                        fis.close();
+                    }
                     nodesWithJar.add(targetNodeId);
                 }
 
@@ -160,7 +196,7 @@ public class JobManager implements JobManagerService {
     }
 
     private void submitMapTaskAttempt(Job job, MapTask task, TaskAttempt attempt) throws IOException {
-        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(attempt.getTargetNodeID());
+        TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorMapTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
             .getOutputPath(), attempt.getTargetNodeID(), task.getPartition(), task.getInputPath()));
     }
@@ -193,7 +229,7 @@ public class JobManager implements JobManagerService {
         // 2. create attempt
         TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
         Path outputPath = job.getPath().append("output");
-        TaskAttempt attempt = new TaskAttempt(attemptId, nodeId, outputPath);
+        TaskAttempt attempt = new TaskAttempt(attemptId, config.nodeId, outputPath);
         task.addAttempt(attempt);
 
         // 3. register and submit task
@@ -202,7 +238,7 @@ public class JobManager implements JobManagerService {
     }
 
     private void submitReduceTaskAttemp(Job job, ReduceTask task, TaskAttempt attempt) throws IOException {
-        TaskExecutorService taskExecutor = cluster.getTaskExecutorService(attempt.getTargetNodeID());
+        TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorReduceTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
             .getOutputPath(), attempt.getTargetNodeID(), task.getInputPaths()));
     }
@@ -260,7 +296,7 @@ public class JobManager implements JobManagerService {
             Phase phase = job.getPhase();
             stateChanged = job.updateStatus(statuses, offset, length);
             if (stateChanged && phase != job.getPhase()) {
-                executorService.submit(new Runnable() {
+                node.getExecutorService().submit(new Runnable() {
                     @Override
                     public void run() {
                         try {
