@@ -33,12 +33,14 @@ public class JobManager implements JobManagerService {
     private final ExecutorService executorService;
     private final AtomicInteger counter;
     private final Map<JobID, Job> jobs;
+    private final Map<NodeID, TaskExecutorStatus> nodeStatuses;
 
     JobManager(NodeID id) {
         this.nodeId = id;
         this.counter = new AtomicInteger();
         this.jobs = new ConcurrentHashMap<JobID, Job>();
         this.executorService = Executors.newCachedThreadPool();
+        this.nodeStatuses = new ConcurrentHashMap<NodeID, TaskExecutorStatus>();
     }
 
     public void start(Cluster cluster) {
@@ -239,6 +241,13 @@ public class JobManager implements JobManagerService {
             }
             stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
         }
+        // Add or update the NodeID with the latest status
+        nodeStatuses.put(status.getNodeID(), status);
+        
+        // check thresholds
+        // queueLength, cpuutilization
+        // schedule thread (runnable)
+        //   run() - calls remote job manager, sends over task
         return stateChange;
     }
 
