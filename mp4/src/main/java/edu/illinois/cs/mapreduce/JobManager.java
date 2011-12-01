@@ -243,11 +243,11 @@ public class JobManager implements JobManagerService {
         }
         // Add or update the NodeID with the latest status
         nodeStatuses.put(status.getNodeID(), status);
-        
+        // Make decision if load balance needs to occur
         // check thresholds
-        // queueLength, cpuutilization
+        // if queueLength > 0 && cpuUtilization is overloaded
         // schedule thread (runnable)
-        //   run() - calls remote job manager, sends over task
+        //   run() - calls remote job manager, sends over task?
         return stateChange;
     }
 
