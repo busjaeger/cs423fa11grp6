@@ -435,11 +435,11 @@ public class JobManager implements JobManagerService {
      * @return score
      */
     private double FindNodeScore(NodeStatus ns) {
-        double averageScore = (ns.getAvgCpuUtilization() + ns.getThrottle()) *
-            ns.getAvgQueueLength();
+        double averageScore = (ns.getAvgCpuUtilization() + ns.getThrottle() + 1) *
+            (ns.getAvgQueueLength() + 1);
         
-        double lastScore = (ns.getLastCpuUtilization() + ns.getThrottle()) *
-            ns.getLastQueueLength();
+        double lastScore = (ns.getLastCpuUtilization() + ns.getThrottle() + 1) *
+            (ns.getLastQueueLength() + 1);
         
         double score = (lastScore + averageScore) / 2;
         
