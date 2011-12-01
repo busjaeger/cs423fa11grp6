@@ -138,7 +138,11 @@ public class JobManager implements JobManagerService {
                     Future<Partition> future = node.getExecutorService().submit(new Callable<Partition>() {
                         @Override
                         public Partition call() throws IOException {
-                            return partitioner.writePartition(pos);
+                            try {
+                                return partitioner.writePartition(pos);
+                            } finally {
+                                pos.close();
+                            }
                         }
                     });
                     fs.write(inputPath, pis);

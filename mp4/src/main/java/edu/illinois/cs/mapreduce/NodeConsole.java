@@ -48,7 +48,7 @@ public class NodeConsole {
         String host = target[0];
         int port = Integer.parseInt(target[1]);
 
-        NodeServices services = RPCClient.newProxy(host, port, NodeServices.class);
+        NodeServices services = RPC.newClient(host, port, NodeServices.class);
         switch (cmd) {
             case SUBMIT_JOB:
                 if (args.length < 4) {

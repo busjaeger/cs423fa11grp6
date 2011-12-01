@@ -3,7 +3,6 @@ package edu.illinois.cs.mapreduce;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -16,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import edu.illinois.cs.mapreduce.NodeConfiguration.Endpoint;
+import edu.illinois.cs.mapreduce.RPC.RPCServer;
 
 /**
  * The node encapsulates the runtime bootstrap and the remote method invocation
@@ -50,7 +50,7 @@ public class Node {
         for (Entry<NodeID, Endpoint> node : config.nodeMap.entrySet()) {
             NodeID nodeId = node.getKey();
             Endpoint endpoint = node.getValue();
-            nodeMap.put(nodeId, RPCClient.<NodeServices> newProxy(endpoint.host, endpoint.port, NodeServices.class));
+            nodeMap.put(nodeId, RPC.newClient(endpoint.host, endpoint.port, NodeServices.class));
         }
         return new Node(config, jobManager, taskExecutor, fileSystem, nodeMap);
     }
@@ -72,8 +72,10 @@ public class Node {
     private final ExecutorService executorService;
     private final List<NodeID> nodeIds;
     private final Map<NodeID, NodeServices> nodeMap;
+
     private boolean started;
     private RPCServer server;
+    private NodeServices services;
 
     public Node(NodeConfiguration config,
                 JobManager jobManager,
@@ -85,24 +87,26 @@ public class Node {
         this.taskExecutor = taskExecutor;
         this.fileSystem = fileSystem;
         this.nodeMap = nodeMap;
-        this.nodeIds = Collections.unmodifiableList(new ArrayList<NodeID>(nodeMap.keySet()));
+        List<NodeID> ids = new ArrayList<NodeID>(nodeMap.keySet());
+        ids.add(config.nodeId);
+        this.nodeIds = Collections.unmodifiableList(ids);
         this.executorService = Executors.newCachedThreadPool();
     }
 
     public synchronized void start() throws IOException {
         if (started)
             return;
-        started = true;
 
         // start services
-        NodeServices services = new NodeServicesImpl();
+        services = new NodeServicesImpl();
         services.start(this);
 
         // start server
-        ServerSocket serverSocket = new ServerSocket(config.port);
-        RPCServer server = new RPCServer(executorService, serverSocket, NodeServices.class, services);
-        executorService.submit(server);
+        server = RPC.newServer(executorService, config.port, NodeServices.class, services);
+        server.start();
 
+        System.out.println("node " + config.nodeId + " started");
+        started = true;
         // block thread
         try {
             wait();
@@ -114,6 +118,8 @@ public class Node {
     public synchronized void stop() {
         if (started) {
             server.stop();
+            services.stop();
+            started = false;
             notifyAll();
         }
     }

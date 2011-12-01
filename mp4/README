@@ -9,29 +9,16 @@ To import the project into eclipse
 - import 'docs/codestyle.xml' as eclipse Java code style
 
 ##################################################
-To Run the sample
+To Run the sample from eclipse
 ##################################################
 
-1. copy dependencies
- - open a new shell
- - cd mp4
- - mvn dependency:copy-dependencies
-
-2. start RMI registry
- - open a new shell
- - cd mp4
- - CLASSPATH=CLASSPATH=target/dependency/commons-logging-1.0.4.jar:target/dependency/rmiio-2.0.2.jar:target/classes/ rmiregistry &
-
-3. start two nodes
- - open eclipse
- - import launch configurations: File > Import... > Run/Debug > Launch Configurations
- - browse to src/test/resources/sample
- - select all three (Node1.launch, Node2.launch, JobConsole.launch)
- - launch the two Node launch configs
-
-4. run sample app
- - run JobConsole launch config
- - to verify that splits were copied check /tmp/node1 and /tmp/node2
+- open eclipse
+- import launch configurations: File > Import... > Run/Debug > Launch Configurations
+- browse to src/test/resources/sample
+- select all three (Node1.launch, Node2.launch, NodeConsole.launch)
+- launch the two Node launch configs
+- run NodeConsole launch config
+- verify output under /tmp/node1 and /tmp/node2
 
 ##################################################
 Extensions implemented
@@ -40,3 +27,7 @@ Extensions implemented
 1. support for user-defined map reduce functions
 2. support custom input format and task partitioning
 3. support for more than 2 nodes
+4. ability to execute arbitrary number of jobs concurrently on different nodes
+5. runtime properties configurable, e.g. number of threads, heartbeat interval etc.
+6. jobs configurable, e.g. input partition size, output key/value separator
+7. console to interact with any node

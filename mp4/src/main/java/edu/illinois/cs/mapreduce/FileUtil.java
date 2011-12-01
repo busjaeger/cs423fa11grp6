@@ -9,6 +9,8 @@ import java.io.OutputStream;
 
 public final class FileUtil {
 
+    private static final int BUF_SIZE = 4096;
+
     private FileUtil() {
         super();
     }
@@ -77,9 +79,10 @@ public final class FileUtil {
      * @throws IOException
      */
     public static void transfer(InputStream is, OutputStream os) throws IOException {
-        byte[] buf = new byte[4096];
+        byte[] buf = new byte[BUF_SIZE];
         int read;
         while ((read = is.read(buf)) != -1)
             os.write(buf, 0, read);
     }
+
 }
