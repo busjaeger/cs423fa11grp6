@@ -7,7 +7,9 @@ import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +25,7 @@ import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
 
+
 /**
  * This job manager splits jobs into individual tasks and distributes them to
  * the TaskExecutors in the cluster. It derives job status from periodic status
@@ -34,11 +37,14 @@ public class JobManager implements JobManagerService {
     private Node node;
     private final AtomicInteger counter;
     private final Map<JobID, Job> jobs;
+    private Hashtable<NodeID, ArrayList<TaskExecutorStatus>> NodeHealth; 
+    public static final int NODE_HEALTH_HISTORY = 5;
 
     JobManager(NodeConfiguration config) {
         this.config = config;
         this.counter = new AtomicInteger();
         this.jobs = new ConcurrentHashMap<JobID, Job>();
+        this.NodeHealth = new Hashtable<NodeID, ArrayList<TaskExecutorStatus>>();
     }
 
     @Override
@@ -275,6 +281,11 @@ public class JobManager implements JobManagerService {
             }
             stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
         }
+        
+        //TODO: Is this a good place to check for rebalancing?
+        UpdateNodeHealth(status);
+        CheckLoadDistribution();
+
         return stateChange;
     }
 
@@ -310,5 +321,159 @@ public class JobManager implements JobManagerService {
         }
         return stateChanged;
     }
-
+    
+    /**
+     * Reviews the stored node status information and determines if a rebalance 
+     * will occur.
+     */
+    private void CheckLoadDistribution() {
+        NodeID free = null, busy = null;
+        
+        ArrayList<NodeStatus> idleNodeStats = new ArrayList<NodeStatus>();
+        ArrayList<NodeStatus> busyNodeStats = new ArrayList<NodeStatus>();
+        
+        synchronized(NodeHealth) {
+            if (NodeHealth.size()<2)
+                return; // Don't have data on other nodes yet, so no decision can be made
+            
+            // For each node in the list, calculate their average and last queue/cpu stats and store in a list
+            for (Enumeration<NodeID> e = NodeHealth.keys(); e.hasMoreElements(); ) {
+                ArrayList<TaskExecutorStatus> TaskExecStats = NodeHealth.get(e.nextElement());
+                int size = TaskExecStats.size();
+                double sumCpu=0;
+                double sumQueue=0;
+                if(size>0) {
+                    for(int i=0; i<TaskExecStats.size(); i++) {
+                        sumCpu += TaskExecStats.get(i).getCpuUtilization();
+                        sumQueue += TaskExecStats.get(i).getQueueLength();
+                    }
+                    
+                    NodeStatus ns = new NodeStatus(
+                           TaskExecStats.get(0).getNodeID(),                    // NodeID
+                           TaskExecStats.get(size-1).getCpuUtilization(),       // Last CPU Percentage
+                           TaskExecStats.get(size-1).getQueueLength(),          // Last Queue Length 
+                           (sumCpu/size),                                       // Average CPU over recorded span
+                           (sumQueue/size),                                     // Average Queue Length over recorded span
+                           TaskExecStats.get(size-1).getThrottle());            // Last throttle value 
+                    if(ns.isIdle())
+                        idleNodeStats.add(ns);
+                    else
+                        busyNodeStats.add(ns);
+                }
+            }
+        }
+        
+        // Data gathering complete, so the logic can be run outside of the sync block
+        // If either all of the nodes are busy or no nodes have queued tasks, no need to rebalance
+        if(idleNodeStats.size()>0 && busyNodeStats.size()>0)  
+        {
+            busy = FindBusiestNode(busyNodeStats);
+            free = FindIdlestNode(idleNodeStats);
+            assert(busy != free);
+            RebalanceTasks(busy, free);
+        }
+    }
+    
+    /**
+     * Searches through list of busy nodes to find the busiest node
+     * 
+     * @param list of busy nodes' statuses
+     * @return NodeID of busiest node
+     */
+    private NodeID FindBusiestNode(ArrayList<NodeStatus> list) {
+        NodeID busiest = null;
+        double busiestScore = 0.0;
+        for(int i=0; i<list.size(); i++) {
+            if(busiest==null) {
+                busiest = list.get(i).getNodeID();      // This will always be the case on 2 node clusters
+                busiestScore = FindNodeScore(list.get(i));
+            }
+            else {
+                double myScore = FindNodeScore(list.get(i));
+                if(myScore > busiestScore) {
+                    busiest = list.get(i).getNodeID();
+                    busiestScore = myScore;
+                }
+            }
+        }
+        return busiest;
+    }
+    
+    /**
+     * Searches through list of idle nodes to find the least busy node
+     * 
+     * @param list of idle nodes' statuses
+     * @return NodeID of least busy node
+     */
+    private NodeID FindIdlestNode(ArrayList<NodeStatus> list) {
+        NodeID idlest = null;
+        double idlestScore = 1000.0;
+        for(int i=0; i<list.size(); i++) {
+            if(idlest==null) {
+                idlest = list.get(i).getNodeID();
+                idlestScore = FindNodeScore(list.get(i));
+            }
+            else {
+                double myScore = FindNodeScore(list.get(i));
+                if(myScore < idlestScore) {
+                    idlest = list.get(i).getNodeID();
+                    idlestScore = myScore;
+                }
+            }
+        }
+        return idlest;
+    }
+    
+    /**
+     * Gets the node's business score (higher is more busy)
+     * 
+     * @param ns
+     * @return score
+     */
+    private double FindNodeScore(NodeStatus ns) {
+        double averageScore = (ns.getAvgCpuUtilization() + ns.getThrottle()) *
+            ns.getAvgQueueLength();
+        
+        double lastScore = (ns.getLastCpuUtilization() + ns.getThrottle()) *
+            ns.getLastQueueLength();
+        
+        double score = (lastScore + averageScore) / 2;
+        
+        return score;
+    }
+    
+    /**
+     * Updates the local cache of node health data to be used in determining if
+     * a rebalance of tasks is needed.
+     * 
+     * @param status
+     */
+    private void UpdateNodeHealth(TaskExecutorStatus status) {
+        synchronized(NodeHealth) {
+            if (NodeHealth.containsKey(status.getNodeID())) {
+                ArrayList<TaskExecutorStatus> statuses = NodeHealth.get(status.getNodeID());
+                statuses.add(status);
+                if(statuses.size()>NODE_HEALTH_HISTORY) {
+                    statuses.remove(0);
+                }
+                NodeHealth.put(status.getNodeID(), statuses);
+            }
+            else {
+                ArrayList<TaskExecutorStatus> statuses = new ArrayList<TaskExecutorStatus>();
+                statuses.add(status);
+                NodeHealth.put(status.getNodeID(), statuses);
+            }
+        }
+    }
+    
+    /**
+     * Removes a waiting task from the specified busy node and assigns it to 
+     * the free node
+     * 
+     * @param busy
+     * @param free
+     */
+    private void RebalanceTasks(NodeID busy, NodeID free) {
+        //TODO: cancel task on busy node and execute it on free node
+    }
 }
