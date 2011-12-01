@@ -63,9 +63,9 @@ class TaskRunner implements Runnable {
             task.setState(State.CANCELED);
         } catch (Throwable t) {
             task.setFailed(t.getMessage());
+            t.printStackTrace();
             if (t instanceof Error)
                 throw (Error)t;
-            t.printStackTrace();
         } finally {
             completion.release();
         }
