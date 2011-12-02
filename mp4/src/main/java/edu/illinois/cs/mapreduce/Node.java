@@ -26,8 +26,16 @@ import edu.illinois.cs.mapreduce.RPC.RPCServer;
 public class Node {
 
     public static void main(String[] args) throws IOException {
-        String path = args.length > 1 && args[0].equals("-config") ? args[1] : null;
-        Node node = getInstance(path);
+        String configPath = null;
+        if (args.length > 0) {
+            if (args.length == 2 && args[0].endsWith("-n")) {
+                configPath = args[1];
+            } else {
+                System.out.println("unknown arguments");
+                System.exit(1);
+            }
+        }
+        Node node = getInstance(configPath);
         node.start();
     }
 
@@ -113,7 +121,7 @@ public class Node {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        System.out.println("node "+config.nodeId + " stopped");
+        System.out.println("node " + config.nodeId + " stopped");
     }
 
     public synchronized void stop() {
