@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
+import edu.illinois.cs.mapreduce.Job.Phase;
 import edu.illinois.cs.mapreduce.Node.NodeServices;
+import edu.illinois.cs.mapreduce.Status.State;
 
 public class NodeConsole {
 
@@ -81,18 +83,39 @@ public class NodeConsole {
                 } else if (params.length == 1) {
                     JobID jobId = JobID.fromQualifiedString(params[0]);
                     JobStatus job = services.getJobStatus(jobId);
-                    System.out.println("Job " + job.getId() + " status:");
-                    System.out.println("  State:" + job.getState());
-                    System.out.println("  Phase:" + job.getPhase());
+                    System.out.println("Job " + job.getId()
+                        + " status: "
+                        + (job.getPhase() == Phase.REDUCE && job.getState() == State.SUCCEEDED ? State.SUCCEEDED : job
+                            .getPhase() + "-" + job.getState()));
+                    ImmutableStatus<JobID> mapStatus = (job.getPhase() == Phase.MAP ? job : job.getMapStatus());
+                    System.out.println("  Phase: " + Phase.MAP);
+                    System.out.println("    State: " + mapStatus.getState());
                     for (TaskStatus task : job.getMapTaskStatuses()) {
-                        System.out.println("  Task " + task.getId().getValue());
-                        System.out.println("    State:" + task.getState());
+                        System.out.println("    Map Task " + task.getId().getValue());
+                        System.out.println("      State: " + task.getState());
                         for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
-                            System.out.println("   Attempt " + attempt.getId().getValue() + ":");
-                            System.out.println("     Running on Node:" + attempt.getTargetNodeID());
-                            System.out.println("     State:" + attempt.getState());
+                            System.out.println("     Attempt " + attempt.getId().getValue() + ":");
+                            System.out.println("       Running on Node:" + attempt.getTargetNodeID());
+                            System.out.println("       State: " + attempt.getState());
                             if (attempt.getMessage() != null)
-                                System.out.println("     Message:" + attempt.getMessage());
+                                System.out.println("       Message: " + attempt.getMessage());
+                        }
+                    }
+                    System.out.println("  Phase: " + Phase.REDUCE);
+                    if (job.getPhase() == Phase.REDUCE) {
+                        System.out.println("    State: " + job.getState());
+                    } else {
+                        System.out.println("    State: Not Started");
+                    }
+                    for (TaskStatus task : job.getReduceTaskStatuses()) {
+                        System.out.println("    Reduce Task " + task.getId().getValue());
+                        System.out.println("      State: " + task.getState());
+                        for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                            System.out.println("     Attempt " + attempt.getId().getValue() + ":");
+                            System.out.println("       Running on Node:" + attempt.getTargetNodeID());
+                            System.out.println("       State: " + attempt.getState());
+                            if (attempt.getMessage() != null)
+                                System.out.println("       Message: " + attempt.getMessage());
                         }
                     }
                 } else if (params.length == 2) {

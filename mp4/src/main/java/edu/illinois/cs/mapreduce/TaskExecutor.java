@@ -78,6 +78,7 @@ class TaskExecutor implements TaskExecutorService {
     public void stop() {
         this.timer.cancel();
         this.statusUpdateFuture.cancel(true);
+        this.executorService.shutdown();
     }
 
     @Override
