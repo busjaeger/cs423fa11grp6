@@ -32,3 +32,5 @@ Extensions implemented
 6. jobs configurable, e.g. input partition size, output key/value separator
 7. console that can connect to to any node and execute commands
 8. display total time, wait time, running time for each job, task, and attempt
+9. bootstrap policy for initial task distribution
+10. pluggable policy framework

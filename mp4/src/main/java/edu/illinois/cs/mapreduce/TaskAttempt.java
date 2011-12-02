@@ -26,6 +26,18 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
         return targetNodeID;
     }
 
+    public NodeID getNodeID() {
+        return getJobID().getParentID();
+    }
+
+    public JobID getJobID() {
+        return getTaskID().getParentID();
+    }
+
+    public TaskID getTaskID() {
+        return id.getParentID();
+    }
+
     public Path getOutputPath() {
         return outputPath;
     }

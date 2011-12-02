@@ -171,13 +171,12 @@ class TaskExecutor implements TaskExecutorService {
                 }
                 Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
                 synchronized (executions) {
-                    for (TaskExecution execution : executions.values()) {
-                        TaskAttemptStatus status = execution.getTask().toImmutableStatus();
-                        NodeID nodeId = status.getNodeID();
-                        List<TaskAttemptStatus> nodeStatus = map.get(nodeId);
-                        if (nodeStatus == null)
-                            map.put(nodeId, nodeStatus = new ArrayList<TaskAttemptStatus>());
-                        nodeStatus.add(status);
+                    for (NodeID nodeId: node.getNodeIds()) {
+                        List<TaskAttemptStatus> status = new ArrayList<TaskAttemptStatus>();
+                        map.put(nodeId, status);
+                        // could index by node to avoid repeated iteration
+                        for (TaskExecution execution : executions.values())
+                            status.add(execution.getTask().toImmutableStatus());
                     }
                 }
                 int queueLength = executorService.getQueue().size();
@@ -191,7 +190,7 @@ class TaskExecutor implements TaskExecutorService {
                     try {
                         jobManager.updateStatus(status, statuses);
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        System.out.println("Failed to contact node "+entry.getKey());
                     }
                 }
             }

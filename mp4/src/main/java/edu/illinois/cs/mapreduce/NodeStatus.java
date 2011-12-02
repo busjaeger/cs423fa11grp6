@@ -1,33 +1,49 @@
 package edu.illinois.cs.mapreduce;
 
-public class NodeStatus {
-    private final NodeID nodeID;
-    private final double lastCpuUtilization;
-    private final int lastQueueLength;
-    private final double avgCpuUtilization;
-    private final double avgQueueLength;
-    private final double throttle;
+import java.util.LinkedList;
 
-    public NodeStatus(NodeID nodeID, double cpuUtil, int queueLength, 
-                      double avgCpu, double avgQueue, double throttle) {
-        this.nodeID = nodeID;
-        this.lastCpuUtilization = cpuUtil;
-        this.lastQueueLength = queueLength;
-        this.avgCpuUtilization = avgCpu;
-        this.avgQueueLength = avgQueue;
-        this.throttle = throttle;
+/**
+ * not thread safe
+ * 
+ * @author benjamin
+ */
+public class NodeStatus {
+
+    private static final int NODE_HEALTH_HISTORY = 5;
+
+    private final NodeID nodeID;
+    private double lastCpuUtilization;
+    private int lastQueueLength;
+    private double avgCpuUtilization;
+    private double avgQueueLength;
+    private double throttle;
+    private final LinkedList<TaskExecutorStatus> statuses;
+
+    public NodeStatus(TaskExecutorStatus status) {
+        this.nodeID = status.getNodeID();
+        this.lastCpuUtilization = status.getCpuUtilization();
+        this.lastQueueLength = status.getQueueLength();
+        this.throttle = status.getThrottle();
+        this.avgCpuUtilization = this.lastCpuUtilization;
+        this.avgQueueLength = this.lastQueueLength;
+        this.statuses = new LinkedList<TaskExecutorStatus>();
+        this.statuses.add(status);
     }
 
     public NodeID getNodeID() {
         return nodeID;
     }
 
-    public double getLastCpuUtilization() {
+    public double getCpuUtilization() {
         return lastCpuUtilization;
     }
 
-    public int getLastQueueLength() {
+    public int getQueueLength() {
         return lastQueueLength;
+    }
+
+    public double getThrottle() {
+        return throttle;
     }
 
     public double getAvgCpuUtilization() {
@@ -37,15 +53,25 @@ public class NodeStatus {
     public double getAvgQueueLength() {
         return avgQueueLength;
     }
-    
-    public double getThrottle() {
-        return throttle;
+
+    public void update(TaskExecutorStatus status) {
+        this.lastCpuUtilization = status.getCpuUtilization();
+        this.lastQueueLength = status.getQueueLength();
+        this.throttle = status.getThrottle();
+        if (statuses.size() == NODE_HEALTH_HISTORY)
+            statuses.remove();
+        statuses.add(status);
+        updateAverages();
     }
-    
-    public boolean isIdle() {
-        if(lastQueueLength == 0)
-            return true;
-        else
-            return false;
+
+    private void updateAverages() {
+        double totalCpu = 0.0;
+        double totalQueue = 0.0;
+        for (TaskExecutorStatus status : statuses) {
+            totalCpu += status.getCpuUtilization();
+            totalQueue += status.getQueueLength();
+        }
+        this.avgCpuUtilization = totalCpu / statuses.size();
+        this.avgQueueLength = totalQueue / statuses.size();
     }
 }

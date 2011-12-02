@@ -7,25 +7,26 @@ import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import edu.illinois.cs.mapreduce.BootstrapPolicy.RoundRobinBootstrapPolicy;
+import edu.illinois.cs.mapreduce.LocationPolicy.ScoreBasedLocationPolicy;
+import edu.illinois.cs.mapreduce.SelectionPolicy.DefaultSelectionPolicy;
 import edu.illinois.cs.mapreduce.Status.State;
+import edu.illinois.cs.mapreduce.TransferPolicy.IdleTransferPolicy;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
-
 
 /**
  * This job manager splits jobs into individual tasks and distributes them to
@@ -36,16 +37,24 @@ public class JobManager implements JobManagerService {
 
     private final NodeConfiguration config;
     private Node node;
+    private final TransferPolicy transferPolicy;
+    private final BootstrapPolicy bootstrapPolicy;
+    private final LocationPolicy locationPolicy;
+    private final SelectionPolicy selectionPolicy;
     private final AtomicInteger counter;
+    private volatile boolean transferring;
     private final Map<JobID, Job> jobs;
-    private Hashtable<NodeID, ArrayList<TaskExecutorStatus>> NodeHealth; 
-    public static final int NODE_HEALTH_HISTORY = 5;
+    private final Map<NodeID, NodeStatus> nodeStatuses;
 
     JobManager(NodeConfiguration config) {
         this.config = config;
+        this.bootstrapPolicy = new RoundRobinBootstrapPolicy();
+        this.transferPolicy = new IdleTransferPolicy();
+        this.locationPolicy = new ScoreBasedLocationPolicy();
+        this.selectionPolicy = new DefaultSelectionPolicy();
         this.counter = new AtomicInteger();
-        this.jobs = new ConcurrentHashMap<JobID, Job>();
-        this.NodeHealth = new Hashtable<NodeID, ArrayList<TaskExecutorStatus>>();
+        this.jobs = new TreeMap<JobID, Job>();
+        this.nodeStatuses = new TreeMap<NodeID, NodeStatus>();
     }
 
     @Override
@@ -57,13 +66,16 @@ public class JobManager implements JobManagerService {
     public void stop() {
         // nothing to do
     }
-    
+
     /**
      * Returns an array of job IDs
+     * 
      * @return
      */
-    public JobID[] getJobIDs()  {
-        return (JobID[]) jobs.keySet().toArray();
+    public JobID[] getJobIDs() {
+        synchronized (jobs) {
+            return (JobID[])jobs.keySet().toArray();
+        }
     }
 
     /**
@@ -76,7 +88,9 @@ public class JobManager implements JobManagerService {
         JobDescriptor descriptor = JobDescriptor.read(jarFile);
         JobID jobId = new JobID(config.nodeId, counter.incrementAndGet());
         Job job = new Job(jobId, jarFile.getName(), descriptor);
-        jobs.put(jobId, job);
+        synchronized (jobs) {
+            jobs.put(jobId, job);
+        }
         // 2. submit tasks
         try {
             submitMapTasks(job, jarFile, inputFile);
@@ -128,14 +142,16 @@ public class JobManager implements JobManagerService {
             final Partitioner<?> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
-            List<NodeID> nodeIds = node.getNodeIds();
             MapTask previous = null;
             TaskAttempt previousAttempt = null;
             while (!partitioner.isEOF()) {
                 // 1. chose node to run task on
                 // current selection policy: round-robin
                 // TODO: capacity-based selection policy
-                NodeID targetNodeId = nodeIds.get(num % nodeIds.size());
+                NodeID targetNodeId;
+                synchronized (nodeStatuses) {
+                    targetNodeId = bootstrapPolicy.selectNode(num, node.getNodeIds(), nodeStatuses);
+                }
 
                 // 1. create sub task for the partition
                 TaskID taskId = new TaskID(job.getId(), num, true);
@@ -144,41 +160,7 @@ public class JobManager implements JobManagerService {
                 // 3. write partition to node's file system
                 final FileSystemService fs = node.getFileSystemService(targetNodeId);
 
-                // this complex chunk of code is just to present an output
-                // stream interface to partitioner
-                Partition partition;
-                final PipedOutputStream pos = new PipedOutputStream();
-                try {
-                    final PipedInputStream pis = new PipedInputStream(pos);
-                    Future<Partition> future = node.getExecutorService().submit(new Callable<Partition>() {
-                        @Override
-                        public Partition call() throws IOException {
-                            try {
-                                return partitioner.writePartition(pos);
-                            } finally {
-                                pos.close();
-                            }
-                        }
-                    });
-                    fs.write(inputPath, pis);
-                    try {
-                        partition = future.get();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException(e);
-                    } catch (ExecutionException e) {
-                        Throwable t = e.getCause();
-                        if (t instanceof IOException)
-                            throw (IOException)t;
-                        if (t instanceof Error)
-                            throw (Error)t;
-                        if (t instanceof RuntimeException)
-                            throw (RuntimeException)t;
-                        throw new RuntimeException(e);
-                    }
-                } finally {
-                    pos.close();
-                }
+                Partition partition = writePartition(partitioner, inputPath, fs);
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(targetNodeId)) {
@@ -214,6 +196,49 @@ public class JobManager implements JobManagerService {
         }
     }
 
+    /**
+     * the only purpose of this complex chunk of code is to turn the
+     * OutputStream the partitioner needs into an InputStream for the file
+     * system
+     */
+    private Partition writePartition(final Partitioner<?> partitioner, Path inputPath, final FileSystemService fs)
+        throws IOException {
+        Partition partition;
+        final PipedOutputStream pos = new PipedOutputStream();
+        try {
+            final PipedInputStream pis = new PipedInputStream(pos);
+            Future<Partition> future = node.getExecutorService().submit(new Callable<Partition>() {
+                @Override
+                public Partition call() throws IOException {
+                    try {
+                        return partitioner.writePartition(pos);
+                    } finally {
+                        pos.close();
+                    }
+                }
+            });
+            fs.write(inputPath, pis);
+            try {
+                partition = future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+                Throwable t = e.getCause();
+                if (t instanceof IOException)
+                    throw (IOException)t;
+                if (t instanceof Error)
+                    throw (Error)t;
+                if (t instanceof RuntimeException)
+                    throw (RuntimeException)t;
+                throw new RuntimeException(e);
+            }
+        } finally {
+            pos.close();
+        }
+        return partition;
+    }
+
     private void submitMapTaskAttempt(Job job, MapTask task, TaskAttempt attempt) throws IOException {
         TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorMapTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
@@ -239,7 +264,8 @@ public class JobManager implements JobManagerService {
             for (MapTask mapTask : job.getMapTasks()) {
                 TaskAttempt attempt = mapTask.getSuccessfulAttempt();
                 if (attempt == null)
-                    throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
+                    throw new IllegalStateException("Map task " + mapTask.getId()
+                        + " does not have a succeeded attempt");
                 QualifiedPath qPath = new QualifiedPath(attempt.getTargetNodeID(), attempt.getOutputPath());
                 inputPaths.add(qPath);
             }
@@ -268,7 +294,10 @@ public class JobManager implements JobManagerService {
      */
     @Override
     public JobStatus getJobStatus(JobID jobID) throws IOException {
-        Job job = jobs.get(jobID);
+        Job job;
+        synchronized (jobs) {
+            job = jobs.get(jobID);
+        }
         return job.toImmutableStatus();
     }
 
@@ -279,10 +308,6 @@ public class JobManager implements JobManagerService {
     @Override
     public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] taskStatuses) throws IOException {
         boolean stateChange = false;
-        
-        //TODO: OK here?
-        UpdateNodeHealth(status);
-        
         if (taskStatuses.length > 0) {
             int offset = 0, len = 1;
             JobID jobId = taskStatuses[0].getJobID();
@@ -298,9 +323,25 @@ public class JobManager implements JobManagerService {
                 }
             }
             stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
-            
         }
-        
+        synchronized (nodeStatuses) {
+            NodeID nodeId = status.getNodeID();
+            NodeStatus ns = nodeStatuses.get(nodeId);
+            if (ns == null)
+                nodeStatuses.put(nodeId, ns = new NodeStatus(status));
+            ns.update(status);
+            final NodeStatus nodeStatus = ns;
+            if (!transferring && nodeStatuses.size() > 1
+                && transferPolicy.isTransferNeeded(nodeStatus, nodeStatuses.values())) {
+                transferring = true;
+                node.getExecutorService().submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        rebalance(nodeStatus);
+                    }
+                });
+            }
+        }
         return stateChange;
     }
 
@@ -314,11 +355,15 @@ public class JobManager implements JobManagerService {
      * @param offset
      * @param length
      * @return
-     * @throws IOException 
+     * @throws IOException
      */
-    private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length) throws IOException {
+    private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length)
+        throws IOException {
         boolean stateChanged;
-        final Job job = jobs.get(jobId);
+        final Job job;
+        synchronized (jobs) {
+            job = jobs.get(jobId);
+        }
         synchronized (job) {
             Phase phase = job.getPhase();
             stateChanged = job.updateStatus(statuses, offset, length);
@@ -335,189 +380,81 @@ public class JobManager implements JobManagerService {
                 });
             }
         }
-        
-        //TODO: Is this a good place to check for rebalancing?
-        JobStatus js = job.toImmutableStatus();
-        CheckLoadDistribution(js);
-        
         return stateChanged;
     }
-    
-    /**
-     * Reviews the stored node status information and determines if a rebalance 
-     * will occur.
-     * @throws IOException 
-     */
-    private void CheckLoadDistribution(JobStatus js) throws IOException {
-        NodeID free = null, busy = null;
-        
-        ArrayList<NodeStatus> idleNodeStats = new ArrayList<NodeStatus>();
-        ArrayList<NodeStatus> busyNodeStats = new ArrayList<NodeStatus>();
-        
-        synchronized(NodeHealth) {
-            if (NodeHealth.size()<2)
-                return; // Don't have data on other nodes yet, so no decision can be made
-            
-            // For each node in the list, calculate their average and last queue/cpu stats and store in a list
-            for (Enumeration<NodeID> e = NodeHealth.keys(); e.hasMoreElements(); ) {
-                ArrayList<TaskExecutorStatus> TaskExecStats = NodeHealth.get(e.nextElement());
-                int size = TaskExecStats.size();
-                double sumCpu=0;
-                double sumQueue=0;
-                if(size>0) {
-                    for(int i=0; i<TaskExecStats.size(); i++) {
-                        sumCpu += TaskExecStats.get(i).getCpuUtilization();
-                        sumQueue += TaskExecStats.get(i).getQueueLength();
-                    }
-                    
-                    NodeStatus ns = new NodeStatus(
-                           TaskExecStats.get(0).getNodeID(),                    // NodeID
-                           TaskExecStats.get(size-1).getCpuUtilization(),       // Last CPU Percentage
-                           TaskExecStats.get(size-1).getQueueLength(),          // Last Queue Length 
-                           (sumCpu/size),                                       // Average CPU over recorded span
-                           (sumQueue/size),                                     // Average Queue Length over recorded span
-                           TaskExecStats.get(size-1).getThrottle());            // Last throttle value 
-                    if(ns.isIdle())
-                        idleNodeStats.add(ns);
-                    else
-                        busyNodeStats.add(ns);
-                }
+
+    private void rebalance(NodeStatus nodeStatus) {
+        try {
+            NodeID source;
+            NodeID target;
+            synchronized (nodeStatuses) {
+                source = locationPolicy.source(nodeStatuses.values());
+                target = locationPolicy.target(nodeStatuses.values());
             }
-        }
-        
-        // Data gathering complete, so the logic can be run outside of the sync block
-        // If either all of the nodes are busy or no nodes have queued tasks, no need to rebalance
-        if(idleNodeStats.size()>0 && busyNodeStats.size()>0)  
-        {
-            busy = FindBusiestNode(busyNodeStats);
-            free = FindIdlestNode(idleNodeStats);
-            assert(busy != free);
-            RebalanceTasks(js, busy, free);
+            if (source == target) {
+                System.out.println("Same source and target selected");
+                return;
+            }
+            TaskAttempt attempt;
+            synchronized (jobs) {
+                attempt = selectionPolicy.selectAttempt(target, jobs.values());
+            }
+            if (attempt == null) {
+                System.out.println("No suitable task found for transfer from " + source);
+                return;
+            }
+            transferTask(target, attempt);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            transferring = false;
         }
     }
-    
+
     /**
-     * Searches through list of busy nodes to find the busiest node
-     * 
-     * @param list of busy nodes' statuses
-     * @return NodeID of busiest node
-     */
-    private NodeID FindBusiestNode(ArrayList<NodeStatus> list) {
-        NodeID busiest = null;
-        double busiestScore = 0.0;
-        for(int i=0; i<list.size(); i++) {
-            if(busiest==null) {
-                busiest = list.get(i).getNodeID();      // This will always be the case on 2 node clusters
-                busiestScore = FindNodeScore(list.get(i));
-            }
-            else {
-                double myScore = FindNodeScore(list.get(i));
-                if(myScore > busiestScore) {
-                    busiest = list.get(i).getNodeID();
-                    busiestScore = myScore;
-                }
-            }
-        }
-        return busiest;
-    }
-    
-    /**
-     * Searches through list of idle nodes to find the least busy node
-     * 
-     * @param list of idle nodes' statuses
-     * @return NodeID of least busy node
-     */
-    private NodeID FindIdlestNode(ArrayList<NodeStatus> list) {
-        NodeID idlest = null;
-        double idlestScore = 1000.0;
-        for(int i=0; i<list.size(); i++) {
-            if(idlest==null) {
-                idlest = list.get(i).getNodeID();
-                idlestScore = FindNodeScore(list.get(i));
-            }
-            else {
-                double myScore = FindNodeScore(list.get(i));
-                if(myScore < idlestScore) {
-                    idlest = list.get(i).getNodeID();
-                    idlestScore = myScore;
-                }
-            }
-        }
-        return idlest;
-    }
-    
-    /**
-     * Gets the node's business score (higher is more busy)
-     * 
-     * @param ns
-     * @return score
-     */
-    private double FindNodeScore(NodeStatus ns) {
-        double averageScore = (ns.getAvgCpuUtilization() + ns.getThrottle() + 1) *
-            (ns.getAvgQueueLength() + 1);
-        
-        double lastScore = (ns.getLastCpuUtilization() + ns.getThrottle() + 1) *
-            (ns.getLastQueueLength() + 1);
-        
-        double score = (lastScore + averageScore) / 2;
-        
-        return score;
-    }
-    
-    /**
-     * Updates the local cache of node health data to be used in determining if
-     * a rebalance of tasks is needed.
-     * 
-     * @param status
-     */
-    private void UpdateNodeHealth(TaskExecutorStatus status) {
-        synchronized(NodeHealth) {
-            if (NodeHealth.containsKey(status.getNodeID())) {
-                ArrayList<TaskExecutorStatus> statuses = NodeHealth.get(status.getNodeID());
-                statuses.add(status);
-                if(statuses.size()>NODE_HEALTH_HISTORY) {
-                    statuses.remove(0);
-                }
-                NodeHealth.put(status.getNodeID(), statuses);
-            }
-            else {
-                ArrayList<TaskExecutorStatus> statuses = new ArrayList<TaskExecutorStatus>();
-                statuses.add(status);
-                NodeHealth.put(status.getNodeID(), statuses);
-            }
-        }
-    }
-    
-    /**
-     * Removes a waiting task from the specified busy node and assigns it to 
-     * the free node
+     * transfer a task attempt from current node to a different one
      * 
      * @param busy
      * @param free
-     * @throws IOException 
+     * @throws IOException
      */
-    private void RebalanceTasks(JobStatus js, NodeID busy, NodeID free) throws IOException {
-        for (TaskStatus taskStatus : js.getTaskStatuses(Phase.MAP)) {
-            if(taskStatus.getState() == State.WAITING)
-                for (TaskAttemptStatus attemptStatus : taskStatus.getAttemptStatuses()) {
-                    if (attemptStatus.getState() == State.WAITING && attemptStatus.getTargetNodeID() == busy) {
-                        // add new task attempt (first so task does not seem done)
-                        Job job = jobs.get(attemptStatus.getJobID());
-                        MapTask task = job.getMapTask(attemptStatus.getTaskID());
-                        TaskAttemptID attemptID = task.nextAttemptID();
-                        Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
-                        TaskAttempt newAttempt = new TaskAttempt(attemptID, free, outputPath);
-                        task.addAttempt(newAttempt);
-                        submitMapTaskAttempt(job, task, newAttempt);
-                        try {
-                            node.getTaskExecutorService(busy).cancel(attemptStatus.getId(), 10, TimeUnit.SECONDS);
-                        } catch (TimeoutException e) {
-                            // ignore
-                            e.printStackTrace();
-                        }
-                        return;
-                    }
-                }
+    private void transferTask(NodeID target, TaskAttempt attempt) throws IOException {
+        Job job;
+        synchronized (jobs) {
+            job = jobs.get(attempt.getJobID());
         }
+        TaskID taskId = attempt.getTaskID();
+        if (!taskId.isMap())
+            throw new IllegalArgumentException("Can currently only transfer map tasks");
+        MapTask task = (MapTask)job.getMapTask(taskId);
+
+        NodeID source = attempt.getTargetNodeID();
+        FileSystemService sourceFs = node.getFileSystemService(source);
+        FileSystemService targetFs = node.getFileSystemService(target);
+
+        // make sure jar is present
+        Path jarPath = job.getJarPath();
+        if (!targetFs.exists(jarPath))
+            targetFs.write(jarPath, sourceFs.read(jarPath));
+
+        // make sure input file is present
+        Path inputPath = task.getInputPath();
+        if (!targetFs.exists(inputPath))
+            targetFs.write(inputPath, sourceFs.read(inputPath));
+
+        // create a new attempt
+        TaskAttemptID attemptID = task.nextAttemptID();
+        Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
+        TaskAttempt newAttempt = new TaskAttempt(attemptID, target, outputPath);
+        task.addAttempt(newAttempt);
+
+        submitMapTaskAttempt(job, task, newAttempt);
+        try {
+            node.getTaskExecutorService(source).cancel(attempt.getId(), 10, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // ignore
+            e.printStackTrace();
+        }
+        return;
     }
 }
