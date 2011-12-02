@@ -24,8 +24,8 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
         this.attempts = new TreeMap<TaskAttemptID, TaskAttempt>(ID.<TaskAttemptID> getValueComparator());
     }
 
-    public int nextAttemptID() {
-        return attemptCounter.incrementAndGet();
+    public TaskAttemptID nextAttemptID() {
+        return new TaskAttemptID(id, attemptCounter.incrementAndGet());
     }
 
     public synchronized void addAttempt(TaskAttempt attempt) {

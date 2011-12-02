@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import edu.illinois.cs.mapreduce.Job.Phase;
@@ -194,7 +195,7 @@ public class JobManager implements JobManagerService {
                 MapTask task = new MapTask(taskId, partition, inputPath);
                 job.addTask(task);
                 // 5. create and register task attempt
-                TaskAttemptID attemptID = new TaskAttemptID(taskId, task.nextAttemptID());
+                TaskAttemptID attemptID = task.nextAttemptID();
                 Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
                 TaskAttempt attempt = new TaskAttempt(attemptID, targetNodeId, outputPath);
                 task.addAttempt(attempt);
@@ -314,8 +315,9 @@ public class JobManager implements JobManagerService {
      * @param offset
      * @param length
      * @return
+     * @throws IOException 
      */
-    private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length) {
+    private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length) throws IOException {
         boolean stateChanged;
         final Job job = jobs.get(jobId);
         synchronized (job) {
@@ -345,8 +347,9 @@ public class JobManager implements JobManagerService {
     /**
      * Reviews the stored node status information and determines if a rebalance 
      * will occur.
+     * @throws IOException 
      */
-    private void CheckLoadDistribution(JobStatus js) {
+    private void CheckLoadDistribution(JobStatus js) throws IOException {
         NodeID free = null, busy = null;
         
         ArrayList<NodeStatus> idleNodeStats = new ArrayList<NodeStatus>();
@@ -492,15 +495,26 @@ public class JobManager implements JobManagerService {
      * 
      * @param busy
      * @param free
+     * @throws IOException 
      */
-    private void RebalanceTasks(JobStatus js, NodeID busy, NodeID free) {
-        for (TaskStatus task : js.getMapTaskStatuses()) {
-            if(task.getState() == State.WAITING)
-                for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
-                    if (attempt.getState() == State.WAITING && attempt.getTargetNodeID() == busy) {
-                        if(node.getTaskExecutorService(busy).cancel(attempt.getId(), 10, TimeUnit.SECONDS)) {
-                            node.getTaskExecutorService(free).execute(task);      //TODO: execute task on free node
-                            node.getTaskExecutorService(busy).delete(attempt.getId()); 
+    private void RebalanceTasks(JobStatus js, NodeID busy, NodeID free) throws IOException {
+        for (TaskStatus taskStatus : js.getMapTaskStatuses()) {
+            if(taskStatus.getState() == State.WAITING)
+                for (TaskAttemptStatus attemptStatus : taskStatus.getAttemptStatuses()) {
+                    if (attemptStatus.getState() == State.WAITING && attemptStatus.getTargetNodeID() == busy) {
+                        // add new task attempt (first so task does not seem done)
+                        Job job = jobs.get(attemptStatus.getJobID());
+                        MapTask task = job.getMapTask(attemptStatus.getTaskID());
+                        TaskAttemptID attemptID = task.nextAttemptID();
+                        Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
+                        TaskAttempt newAttempt = new TaskAttempt(attemptID, free, outputPath);
+                        task.addAttempt(newAttempt);
+                        submitMapTaskAttempt(job, task, newAttempt);
+                        try {
+                            node.getTaskExecutorService(busy).cancel(attemptStatus.getId(), 10, TimeUnit.SECONDS);
+                        } catch (TimeoutException e) {
+                            // ignore
+                            e.printStackTrace();
                         }
                     }
                 }

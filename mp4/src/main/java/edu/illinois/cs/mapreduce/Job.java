@@ -57,6 +57,10 @@ public class Job extends Status<JobID, JobStatus> {
         return mapStatus;
     }
 
+    public synchronized MapTask getMapTask(TaskID taskID) {
+        return mapTasks.get(taskID);
+    }
+
     public synchronized Task getTask(TaskID taskID) {
         assert taskID.getParentID().equals(id);
         return taskID.isMap() ? mapTasks.get(taskID) : reduceTasks.get(taskID);
