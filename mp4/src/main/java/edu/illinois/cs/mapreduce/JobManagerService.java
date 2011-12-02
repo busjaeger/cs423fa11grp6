@@ -22,6 +22,8 @@ public interface JobManagerService extends NodeService {
      */
     JobID submitJob(File jarFile, File inputFile) throws IOException;
 
+    JobID[] getJobIDs();
+    
     JobStatus getJobStatus(JobID jobID) throws IOException;
 
     /**
