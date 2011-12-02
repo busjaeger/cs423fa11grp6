@@ -516,6 +516,7 @@ public class JobManager implements JobManagerService {
                             // ignore
                             e.printStackTrace();
                         }
+                        return;
                     }
                 }
         }
