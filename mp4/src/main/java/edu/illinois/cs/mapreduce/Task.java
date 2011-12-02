@@ -63,7 +63,7 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
         for (int i = offset; i < offset + length; i++) {
             TaskAttemptStatus status = statuses[i];
             TaskAttempt attempt = attempts.get(status.getId());
-            stateChange |= attempt.updateStatus(status);
+            stateChange |= attempt.update(status);
         }
         return stateChange ? updateStatus() : stateChange;
     }

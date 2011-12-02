@@ -5,9 +5,7 @@ import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.mapreduce.Job.Phase;
 import edu.illinois.cs.mapreduce.Node.NodeServices;
-import edu.illinois.cs.mapreduce.Status.State;
 
 public class NodeConsole {
 
@@ -83,45 +81,16 @@ public class NodeConsole {
                 } else if (params.length == 1) {
                     JobID jobId = JobID.fromQualifiedString(params[0]);
                     JobStatus job = services.getJobStatus(jobId);
-                    System.out.println("Job " + job.getId()
-                        + " status: "
-                        + (job.getPhase() == Phase.REDUCE && job.getState() == State.SUCCEEDED ? State.SUCCEEDED : job
-                            .getPhase() + "-" + job.getState()));
-                    ImmutableStatus<JobID> mapStatus = (job.getPhase() == Phase.MAP ? job : job.getMapStatus());
-                    System.out.println("  Phase: " + Phase.MAP);
-                    System.out.println("    State: " + mapStatus.getState());
-                    for (TaskStatus task : job.getMapTaskStatuses()) {
-                        System.out.println("    Map Task " + task.getId().getValue());
-                        System.out.println("      State: " + task.getState());
-                        for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
-                            System.out.println("     Attempt " + attempt.getId().getValue() + ":");
-                            System.out.println("       Running on Node:" + attempt.getTargetNodeID());
-                            System.out.println("       State: " + attempt.getState());
-                            if (attempt.getMessage() != null)
-                                System.out.println("       Message: " + attempt.getMessage());
-                        }
-                    }
-                    System.out.println("  Phase: " + Phase.REDUCE);
-                    if (job.getPhase() == Phase.REDUCE) {
-                        System.out.println("    State: " + job.getState());
-                    } else {
-                        System.out.println("    State: Not Started");
-                    }
-                    for (TaskStatus task : job.getReduceTaskStatuses()) {
-                        System.out.println("    Reduce Task " + task.getId().getValue());
-                        System.out.println("      State: " + task.getState());
-                        for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
-                            System.out.println("     Attempt " + attempt.getId().getValue() + ":");
-                            System.out.println("       Running on Node:" + attempt.getTargetNodeID());
-                            System.out.println("       State: " + attempt.getState());
-                            if (attempt.getMessage() != null)
-                                System.out.println("       Message: " + attempt.getMessage());
-                        }
-                    }
+
+                    System.out.println("\nJob " + job.getId() + " status: " + job.getState() + "\n");
+                    printTimes(job, "");
+
+                    for (Phase phase : Phase.values())
+                        printPhase(job, phase);
                 } else if (params.length == 2) {
-                    System.out.println("Task TODO status");
+                    System.out.println("Task status TODO");
                 } else if (params.length == 3) {
-                    System.out.println("Attempt TODO status");
+                    System.out.println("Attempt status TODO");
                 }
                 break;
             case THROTTLE:
@@ -161,4 +130,65 @@ public class NodeConsole {
         System.out.println("      throttle {integer-value 0-100}");
         System.out.println("      stop-node");
     }
+
+    private static void printPhase(JobStatus job, Phase phase) {
+        System.out.println("  Phase: " + phase);
+        ImmutableStatus<JobID> status = job.getPhaseStatus(phase);
+        if (status == null) {
+            System.out.println("    State: Not Started");
+        } else {
+            System.out.println("    State: " + status.getState());
+            printTimes(status, "    ");
+            printTasks(job.getTaskStatuses(phase), phase);
+        }
+    }
+
+    private static void printTasks(Iterable<TaskStatus> statuses, Phase phase) {
+        for (TaskStatus task : statuses) {
+            System.out.println("    " + phase + " Task #" + task.getId().getValue());
+            System.out.println("      State: " + task.getState());
+            printTimes(task, "      ");
+            for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                System.out.println("      Attempt " + attempt.getId().getValue());
+                System.out.println("        State: " + attempt.getState());
+                System.out.println("        On Node:" + attempt.getTargetNodeID());
+                if (attempt.getMessage() != null)
+                    System.out.println("        Message: " + attempt.getMessage());
+                printTimes(attempt, "        ");
+            }
+        }
+    }
+
+    private static void printTimes(ImmutableStatus<?> status, String prefix) {
+        if (status.isDone()) {
+            long created = status.getCreatedTime();
+            long waiting = status.getBeginWaitingTime();
+            long running = status.getBeginRunningTime();
+            long done = status.getDoneTime();
+            long total = done - created;
+            System.out.println(prefix + "Total time: " + total);
+            // we may not know each event, due to our heart beat frequency
+            // neither known
+            if (waiting == -1 && running == -1) {
+                System.out.println(prefix + "Waiting time: [" + 0 + "-" + total + "]");
+                System.out.println(prefix + "Running time: [" + 0 + "-" + total + "]");
+            }
+            // only running time known
+            else if (waiting == -1) {
+                System.out.println(prefix + "Waiting time: [" + 0 + "-" + (running - created) + "]");
+                System.out.println(prefix + "Running time: " + (done - running));
+            }
+            // only queue time known
+            else if (running == -1) {
+                System.out.println(prefix + "Waiting time: [" + 0 + "-" + (done - waiting) + "]");
+                System.out.println(prefix + "Running time: [" + 0 + "-" + (done - waiting) + "]");
+            }
+            // both known
+            else {
+                System.out.println(prefix + "Waiting time: " + (running - waiting));
+                System.out.println(prefix + "Running time: " + (done - running));
+            }
+        }
+    }
+
 }

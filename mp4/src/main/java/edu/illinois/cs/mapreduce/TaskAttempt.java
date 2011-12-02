@@ -34,12 +34,13 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
         return message;
     }
 
-    public synchronized boolean updateStatus(TaskAttemptStatus newStatus) {
-        if (getState() == newStatus.getState())
-            return false;
-        setState(newStatus.getState());
-        this.message = newStatus.getMessage();
-        return true;
+    @Override
+    public synchronized boolean update(TaskAttemptStatus newStatus) {
+        if (super.update(newStatus)) {
+            message = newStatus.getMessage();
+            return true;
+        }
+        return false;
     }
 
     @Override

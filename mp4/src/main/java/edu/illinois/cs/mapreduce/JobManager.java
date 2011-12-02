@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.illinois.cs.mapreduce.Job.Phase;
 import edu.illinois.cs.mapreduce.Status.State;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
@@ -498,7 +497,7 @@ public class JobManager implements JobManagerService {
      * @throws IOException 
      */
     private void RebalanceTasks(JobStatus js, NodeID busy, NodeID free) throws IOException {
-        for (TaskStatus taskStatus : js.getMapTaskStatuses()) {
+        for (TaskStatus taskStatus : js.getTaskStatuses(Phase.MAP)) {
             if(taskStatus.getState() == State.WAITING)
                 for (TaskAttemptStatus attemptStatus : taskStatus.getAttemptStatuses()) {
                     if (attemptStatus.getState() == State.WAITING && attemptStatus.getTargetNodeID() == busy) {

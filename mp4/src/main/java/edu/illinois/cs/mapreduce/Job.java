@@ -11,16 +11,10 @@ import java.util.TreeMap;
  * 
  * @author benjamin
  */
-public class Job extends Status<JobID, JobStatus> {
+public class Job extends PhasedStatus<JobID, JobStatus, Phase> {
 
     private static final long serialVersionUID = 5073561871061802007L;
 
-    static enum Phase {
-        MAP, REDUCE
-    }
-
-    private Phase phase;
-    private Status<JobID, ImmutableStatus<JobID>> mapStatus;
     private final Path path;
     private final Path jarPath;
     private final JobDescriptor descriptor;
@@ -28,8 +22,7 @@ public class Job extends Status<JobID, JobStatus> {
     private final Map<TaskID, ReduceTask> reduceTasks;
 
     public Job(JobID id, String jarName, JobDescriptor descriptor) {
-        super(id);
-        this.phase = Phase.MAP;
+        super(id, Phase.class);
         this.path = new Path(id.toQualifiedString());
         this.jarPath = path.append(jarName);
         this.descriptor = descriptor;
@@ -47,14 +40,6 @@ public class Job extends Status<JobID, JobStatus> {
 
     public JobDescriptor getDescriptor() {
         return descriptor;
-    }
-
-    public synchronized Phase getPhase() {
-        return phase;
-    }
-
-    public synchronized Status<JobID, ImmutableStatus<JobID>> getMapStatus() {
-        return mapStatus;
     }
 
     public synchronized MapTask getMapTask(TaskID taskID) {
@@ -89,7 +74,7 @@ public class Job extends Status<JobID, JobStatus> {
     public Iterable<ReduceTask> getReduceTasks() {
         return reduceTasks.values();
     }
-    
+
     @Override
     public synchronized JobStatus toImmutableStatus() {
         return new JobStatus(this);
@@ -120,7 +105,7 @@ public class Job extends Status<JobID, JobStatus> {
 
     private synchronized boolean updateState() {
         State newState = null;
-        switch (phase) {
+        switch (getPhase()) {
             case MAP:
                 newState = computeState(mapTasks.values());
                 break;
@@ -130,12 +115,6 @@ public class Job extends Status<JobID, JobStatus> {
         }
         if (getState() != newState) {
             setState(newState);
-            if (getState() == State.SUCCEEDED && phase == Phase.MAP) {
-                // save map state (timers)
-                mapStatus = new Status<JobID, ImmutableStatus<JobID>>(this);
-                setState(State.CREATED);
-                phase = Phase.REDUCE;
-            }
             return true;
         }
         return false;

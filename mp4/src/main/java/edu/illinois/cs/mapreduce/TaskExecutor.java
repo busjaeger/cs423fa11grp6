@@ -15,6 +15,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import edu.illinois.cs.mapreduce.Status.State;
+
 class TaskExecutor implements TaskExecutorService {
 
     private static class TaskExecution {
@@ -100,8 +102,9 @@ class TaskExecutor implements TaskExecutorService {
     	int sleepFor = this.computeSleepForInterval();
         Semaphore completion = new Semaphore(0);
         TaskRunner runner = new TaskRunner(sleepFor, task, completion, node);
-        Future<?> future = executorService.submit(runner);
         synchronized (executions) {
+            task.setState(State.WAITING);
+            Future<?> future = executorService.submit(runner);
             executions.put(task.getId(), new TaskExecution(future, task, completion));
         }
     }

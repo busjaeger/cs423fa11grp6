@@ -30,4 +30,5 @@ Extensions implemented
 4. ability to execute arbitrary number of jobs concurrently on different nodes
 5. runtime properties configurable, e.g. number of threads, heartbeat interval etc.
 6. jobs configurable, e.g. input partition size, output key/value separator
-7. console to interact with any node
+7. console that can connect to to any node and execute commands
+8. display total time, wait time, running time for each job, task, and attempt

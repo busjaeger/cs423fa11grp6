@@ -28,6 +28,10 @@ public abstract class TaskExecutorTask extends TaskAttempt {
 
     abstract boolean isMap();
 
+    public synchronized boolean isDone() {
+        return State.isEndState(getState());
+    }
+
     public synchronized String getMessage() {
         return message;
     }

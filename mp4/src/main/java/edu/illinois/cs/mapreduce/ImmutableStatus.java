@@ -1,6 +1,7 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -55,11 +56,23 @@ public class ImmutableStatus<T extends ID<T>> implements Serializable {
         return doneTime;
     }
 
-    protected static <I extends ID<I>, S extends Status<I, IS>, IS extends ImmutableStatus<I>> Iterable<IS> toImmutableStatuses(Iterable<S> statuses) {
+    public boolean isDone() {
+        return State.isEndState(state);
+    }
+
+    protected static <I extends ID<I>, S extends Status<I, IS>, IS extends ImmutableStatus<I>> List<IS> toImmutableStatuses(Iterable<? extends S> statuses) {
         List<IS> immutableStatuses = new ArrayList<IS>();
         for (S status : statuses)
-            immutableStatuses.add(status.toImmutableStatus());
+            immutableStatuses.add(status == null ? null : status.toImmutableStatus());
         return Collections.unmodifiableList(immutableStatuses);
     }
 
+    protected static <IS extends ImmutableStatus<?>> IS[] toImmutableStatuses(Status<?, ? extends IS>[] statuses,
+                                                                              Class<? extends IS> clazz) {
+        @SuppressWarnings("unchecked")
+        IS[] immutableStatuses = (IS[])Array.newInstance(clazz, statuses.length);
+        for (int i = 0; i < statuses.length; i++)
+            immutableStatuses[i] = statuses[i] == null ? null : statuses[i].toImmutableStatus();
+        return immutableStatuses;
+    }
 }
