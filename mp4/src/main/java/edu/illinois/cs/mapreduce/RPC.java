@@ -54,6 +54,11 @@ public class RPC {
 
         public void stop() {
             stopped = true;
+            try {
+                serverSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         public void run() {
@@ -64,6 +69,8 @@ public class RPC {
                     ServerConnection connection = new ServerConnection(socket);
                     executorService.execute(connection);
                 } catch (IOException e) {
+                    if (stopped)
+                        break;
                     e.printStackTrace();
                 }
             }
@@ -156,7 +163,7 @@ public class RPC {
                 final ObjectOutputStream os = new ObjectOutputStream(socket.getOutputStream());
                 Invocation invocation = new Invocation(method.getName(), method.getParameterTypes());
                 os.writeObject(invocation);
-                if (args.length > 0) {
+                if (args != null && args.length > 0) {
                     int last = args.length - 1;
                     for (int i = 0; i < last; i++)
                         os.writeObject(args[i]);

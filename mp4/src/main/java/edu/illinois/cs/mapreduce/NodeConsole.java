@@ -10,7 +10,7 @@ import edu.illinois.cs.mapreduce.Node.NodeServices;
 public class NodeConsole {
 
     static enum Command {
-        SUBMIT_JOB("submit-job"), JOB_STATUS("job-status"), SET_THROTTLE("set-throttle");
+        SUBMIT_JOB("submit-job"), STATUS("status"), THROTTLE("throttle"), HELP("help"), STOP_NODE("stop-node");
         private final String string;
 
         private Command(String string) {
@@ -43,76 +43,99 @@ public class NodeConsole {
             System.exit(1);
         }
 
-        // target host:port
-        String[] target = args[1].split(":");
-        String host = target[0];
-        int port = Integer.parseInt(target[1]);
+        // parse options
+        int paramIdx = 1;
+        String host;
+        int port;
+        if (args.length > 2 && args[1].equals("-n")) {
+            String[] target = args[2].split(":");
+            host = target[0];
+            port = Integer.parseInt(target[1]);
+            paramIdx = 3;
+        } else {
+            host = "localhost";
+            port = 60001;
+        }
 
+        String[] params = new String[args.length - paramIdx];
+        System.arraycopy(args, paramIdx, params, 0, params.length);
         NodeServices services = RPC.newClient(host, port, NodeServices.class);
         switch (cmd) {
+            case HELP:
+                printUsage();
+                break;
             case SUBMIT_JOB:
-                if (args.length < 4) {
+                if (params.length < 2) {
                     System.out.println("invalid arguments to " + Command.SUBMIT_JOB + " command");
                     printUsage();
                     System.exit(1);
                 }
-                File jobJarFile = new File(args[2]);
-                File inputFile = new File(args[3]);
+                File jobJarFile = new File(params[0]);
+                File inputFile = new File(params[1]);
                 JobID id = services.submitJob(jobJarFile, inputFile);
                 System.out.println("Job submitted. ID: " + id.toQualifiedString());
                 break;
-            case JOB_STATUS:
-                if (args.length < 2) {
-                    System.out.println("invalid arguments to " + Command.JOB_STATUS + " command");
-                    printUsage();
-                    System.exit(1);
-                }
-                JobID jobId = JobID.fromQualifiedString(args[2]);
-                JobStatus job = services.getJobStatus(jobId);
-                System.out.println("Job " + job.getId() + " status:");
-                System.out.println("  State:" + job.getState());
-                System.out.println("  Phase:" + job.getPhase());
-                for (TaskStatus task : job.getMapTaskStatuses()) {
-                    System.out.println("  Task " + task.getId());
-                    System.out.println("    State:" + task.getState());
-                    for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
-                        System.out.println("   Attempt " + attempt.getId() + ":");
-                        System.out.println("     Running on Node:" + attempt.getTargetNodeID());
-                        System.out.println("     State:" + attempt.getState());
-                        if (attempt.getMessage() != null)
-                            System.out.println("     Message:" + attempt.getMessage());
+            case STATUS:
+                if (params.length == 0) {
+                    System.out.println("Node TODO status:");
+                } else if (params.length == 1) {
+                    JobID jobId = JobID.fromQualifiedString(params[0]);
+                    JobStatus job = services.getJobStatus(jobId);
+                    System.out.println("Job " + job.getId() + " status:");
+                    System.out.println("  State:" + job.getState());
+                    System.out.println("  Phase:" + job.getPhase());
+                    for (TaskStatus task : job.getMapTaskStatuses()) {
+                        System.out.println("  Task " + task.getId().getValue());
+                        System.out.println("    State:" + task.getState());
+                        for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                            System.out.println("   Attempt " + attempt.getId().getValue() + ":");
+                            System.out.println("     Running on Node:" + attempt.getTargetNodeID());
+                            System.out.println("     State:" + attempt.getState());
+                            if (attempt.getMessage() != null)
+                                System.out.println("     Message:" + attempt.getMessage());
+                        }
                     }
+                } else if (params.length == 2) {
+                    System.out.println("Task TODO status");
+                } else if (params.length == 3) {
+                    System.out.println("Attempt TODO status");
                 }
                 break;
-            case SET_THROTTLE:
-                if (args.length < 3) {
-                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+            case THROTTLE:
+                if (params.length != 1) {
+                    System.out.println("invalid arguments to " + Command.THROTTLE + " command");
                     printUsage();
                     System.exit(1);
                 }
                 int newThrottleValue = 0;
                 try {
-                    newThrottleValue = Integer.parseInt(args[2]);
+                    newThrottleValue = Integer.parseInt(params[0]);
                 } catch (Exception e) {
-                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+                    System.out.println("invalid arguments to " + Command.THROTTLE + " command");
                     printUsage();
-                    e.printStackTrace();
-                    System.exit(1);
+                    break;
                 }
                 if (newThrottleValue < 0 || newThrottleValue > 100) {
-                    System.out.println("invalid arguments to " + Command.SET_THROTTLE + " command");
+                    System.out.println("invalid arguments to " + Command.THROTTLE + " command");
                     printUsage();
-                    System.exit(1);
+                    break;
                 }
                 services.setThrottle((double)newThrottleValue);
                 System.out.println("Throttle value set " + newThrottleValue);
+                break;
+            case STOP_NODE:
+                services.stopNode();
         }
     }
 
     private static void printUsage() {
-        System.out.println("usage:");
-        System.out.println("submit-job {job-jar-file} {input-file-path} [-config {config-file}]");
-        System.out.println("job-status {job-id} [-config {config-file}]");
-        System.out.println("set-throttle {integer-value 0-100}");
+        System.out.println("usage: COMMAND [OPTIONS] PARAMETERS");
+        System.out.println("OPTIONS");
+        System.out.println("      -n {host}:{port}      node to connect the console to");
+        System.out.println("COMMANDS");
+        System.out.println("      submit-job {job-jar-file} {input-file-path}");
+        System.out.println("      status [job-id|job-id task#|job-id task# attempt#]");
+        System.out.println("      throttle {integer-value 0-100}");
+        System.out.println("      stop-node");
     }
 }

@@ -62,7 +62,7 @@ public class Node {
     }
 
     public interface NodeServices extends JobManagerService, FileSystemService, TaskExecutorService {
-        //
+        public void stopNode();
     }
 
     private final NodeConfiguration config;
@@ -113,12 +113,14 @@ public class Node {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        System.out.println("node "+config.nodeId + " stopped");
     }
 
     public synchronized void stop() {
         if (started) {
             server.stop();
             services.stop();
+            executorService.shutdown();
             started = false;
             notifyAll();
         }
@@ -159,6 +161,11 @@ public class Node {
     }
 
     class NodeServicesImpl implements NodeServices {
+
+        @Override
+        public void stopNode() {
+            Node.this.stop();
+        }
 
         @Override
         public void start(Node node) {
