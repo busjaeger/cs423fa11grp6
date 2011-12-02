@@ -17,12 +17,12 @@ import java.util.concurrent.TimeoutException;
 
 class TaskExecutor implements TaskExecutorService {
 
-    private static class TaskAttemptExecution {
+    private static class TaskExecution {
         private final Future<?> future;
         private final TaskExecutorTask task;
         private final Semaphore completion;
 
-        TaskAttemptExecution(Future<?> future, TaskExecutorTask task, Semaphore completion) {
+        TaskExecution(Future<?> future, TaskExecutorTask task, Semaphore completion) {
             this.future = future;
             this.task = task;
             this.completion = completion;
@@ -49,7 +49,7 @@ class TaskExecutor implements TaskExecutorService {
     private Node node; // quasi immutable
 
     // mutable state
-    private final Map<TaskAttemptID, TaskAttemptExecution> executions;
+    private final Map<TaskAttemptID, TaskExecution> executions;
     private Future<?> statusUpdateFuture;
     private double throttle;
     private double cpuUtilization;
@@ -58,7 +58,7 @@ class TaskExecutor implements TaskExecutorService {
     TaskExecutor(NodeConfiguration config) {
         this.config = config;
         this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
-        this.executions = new TreeMap<TaskAttemptID, TaskAttemptExecution>();
+        this.executions = new TreeMap<TaskAttemptID, TaskExecution>();
         this.throttle = config.teThrottle;
         this.cpuProfilingInterval = config.teCpuProfilingInterval;
         this.statusUpdateInterval = config.teStatusUpdateInterval;
@@ -101,13 +101,13 @@ class TaskExecutor implements TaskExecutorService {
         TaskRunner runner = new TaskRunner(sleepFor, task, completion, node);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
-            executions.put(task.getId(), new TaskAttemptExecution(future, task, completion));
+            executions.put(task.getId(), new TaskExecution(future, task, completion));
         }
     }
 
     @Override
     public boolean cancel(TaskAttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
-        TaskAttemptExecution execution;
+        TaskExecution execution;
         synchronized (executions) {
             execution = executions.get(id);
         }
@@ -134,7 +134,7 @@ class TaskExecutor implements TaskExecutorService {
 
     @Override
     public boolean delete(TaskAttemptID id) throws IOException {
-        TaskAttemptExecution execution;
+        TaskExecution execution;
         synchronized (executions) {
             execution = executions.get(id);
         }
@@ -167,7 +167,7 @@ class TaskExecutor implements TaskExecutorService {
                 }
                 Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
                 synchronized (executions) {
-                    for (TaskAttemptExecution execution : executions.values()) {
+                    for (TaskExecution execution : executions.values()) {
                         TaskAttemptStatus status = execution.getTask().toImmutableStatus();
                         NodeID nodeId = status.getNodeID();
                         List<TaskAttemptStatus> nodeStatus = map.get(nodeId);
