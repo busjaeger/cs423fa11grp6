@@ -27,13 +27,11 @@ public class Node {
 
     public static void main(String[] args) throws IOException {
         String configPath = null;
-        if (args.length > 0) {
-            if (args.length == 2 && args[0].endsWith("-n")) {
-                configPath = args[1];
-            } else {
-                System.out.println("unknown arguments");
-                System.exit(1);
-            }
+        if (args.length == 1) {
+            configPath = args[0];
+        } else if (args.length > 1) {
+            System.out.println("no more than one argument allowed");
+            System.exit(1);
         }
         Node node = getInstance(configPath);
         node.start();
