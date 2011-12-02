@@ -54,7 +54,7 @@ class TaskRunner implements Runnable {
     @Override
     public void run() {
         try {
-        	Thread.sleep(this.sleepInterval);
+            Thread.sleep(this.sleepInterval);
             task.setState(State.RUNNING);
             init();
             if (task.isMap())

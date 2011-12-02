@@ -1,7 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
 import edu.illinois.cs.mapreduce.Job.Phase;
-import edu.illinois.cs.mapreduce.Status.State;
 
 /**
  * thread safe
@@ -16,15 +15,11 @@ public class JobStatus extends ImmutableStatus<JobID> {
     private final Iterable<TaskStatus> mapTaskStatuses;
     private final Iterable<TaskStatus> reduceTaskStatuses;
 
-    public JobStatus(JobID id,
-                     State state,
-                     Phase phase,
-                     Iterable<TaskStatus> mapTaskStatuses,
-                     Iterable<TaskStatus> reduceTaskStatuses) {
-        super(id, state);
-        this.phase = phase;
-        this.mapTaskStatuses = mapTaskStatuses;
-        this.reduceTaskStatuses = reduceTaskStatuses;
+    public JobStatus(Job job) {
+        super(job);
+        this.phase = job.getPhase();
+        this.mapTaskStatuses = toImmutableStatuses(job.getMapTasks());
+        this.reduceTaskStatuses = toImmutableStatuses(job.getReduceTasks());
     }
 
     public Phase getPhase() {

@@ -1,6 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
-import edu.illinois.cs.mapreduce.Status.State;
+
 
 /**
  * thread safe
@@ -12,9 +12,9 @@ public class TaskStatus extends ImmutableStatus<TaskID> {
 
     private final Iterable<TaskAttemptStatus> attemptStatuses;
 
-    public TaskStatus(TaskID id, State state, Iterable<TaskAttemptStatus> attemptStatuses) {
-        super(id, state);
-        this.attemptStatuses = attemptStatuses;
+    public TaskStatus(Task task) {
+        super(task);
+        this.attemptStatuses = toImmutableStatuses(task.getAttempts());
     }
 
     public Iterable<TaskAttemptStatus> getAttemptStatuses() {

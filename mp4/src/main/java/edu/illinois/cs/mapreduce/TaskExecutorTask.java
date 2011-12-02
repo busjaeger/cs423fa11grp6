@@ -1,25 +1,21 @@
 package edu.illinois.cs.mapreduce;
 
-public abstract class TaskExecutorTask extends Status<TaskAttemptID, TaskAttemptStatus> {
+public abstract class TaskExecutorTask extends TaskAttempt {
 
     private static final long serialVersionUID = 7637704493473769567L;
 
     protected final Path jarPath;
     protected final JobDescriptor descriptor;
-    protected final Path outputPath;
     protected String message;
-    protected final NodeID targetNodeID;
 
     public TaskExecutorTask(TaskAttemptID id,
                             Path jarPath,
                             JobDescriptor descriptor,
                             Path outputPath,
                             NodeID targetNodeID) {
-        super(id);
+        super(id, targetNodeID, outputPath);
         this.jarPath = jarPath;
         this.descriptor = descriptor;
-        this.outputPath = outputPath;
-        this.targetNodeID = targetNodeID;
     }
 
     public Path getJarPath() {
@@ -28,14 +24,6 @@ public abstract class TaskExecutorTask extends Status<TaskAttemptID, TaskAttempt
 
     public JobDescriptor getDescriptor() {
         return descriptor;
-    }
-
-    public Path getOutputPath() {
-        return outputPath;
-    }
-
-    public NodeID getTargetNodeID() {
-        return targetNodeID;
     }
 
     abstract boolean isMap();
@@ -49,13 +37,13 @@ public abstract class TaskExecutorTask extends Status<TaskAttemptID, TaskAttempt
     }
 
     public synchronized void setFailed(String message) {
-        this.state = State.FAILED;
+        setState(State.FAILED);
         this.message = message;
     }
 
     @Override
     public synchronized TaskAttemptStatus toImmutableStatus() {
-        return new TaskAttemptStatus(id, state, targetNodeID, message);
+        return new TaskAttemptStatus(this);
     }
 
 }

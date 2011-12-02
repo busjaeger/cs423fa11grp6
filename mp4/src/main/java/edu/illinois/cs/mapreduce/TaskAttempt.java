@@ -30,17 +30,21 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
         return outputPath;
     }
 
+    public String getMessage() {
+        return message;
+    }
+
     public synchronized boolean updateStatus(TaskAttemptStatus newStatus) {
-        if (state == newStatus.getState())
+        if (getState() == newStatus.getState())
             return false;
-        state = newStatus.getState();
-        message = newStatus.getMessage();
+        setState(newStatus.getState());
+        this.message = newStatus.getMessage();
         return true;
     }
 
     @Override
     public synchronized TaskAttemptStatus toImmutableStatus() {
-        return new TaskAttemptStatus(id, state, targetNodeID, message);
+        return new TaskAttemptStatus(this);
     }
 
 }

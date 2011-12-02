@@ -1,9 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -23,6 +20,7 @@ public class Job extends Status<JobID, JobStatus> {
     }
 
     private Phase phase;
+    private Status<JobID, ImmutableStatus<JobID>> mapStatus;
     private final Path path;
     private final Path jarPath;
     private final JobDescriptor descriptor;
@@ -39,10 +37,6 @@ public class Job extends Status<JobID, JobStatus> {
         this.reduceTasks = new TreeMap<TaskID, ReduceTask>(ID.<TaskID> getValueComparator());
     }
 
-    public synchronized Phase getPhase() {
-        return phase;
-    }
-
     public Path getPath() {
         return path;
     }
@@ -53,6 +47,14 @@ public class Job extends Status<JobID, JobStatus> {
 
     public JobDescriptor getDescriptor() {
         return descriptor;
+    }
+
+    public synchronized Phase getPhase() {
+        return phase;
+    }
+
+    public synchronized Status<JobID, ImmutableStatus<JobID>> getMapStatus() {
+        return mapStatus;
     }
 
     public synchronized Task getTask(TaskID taskID) {
@@ -68,22 +70,25 @@ public class Job extends Status<JobID, JobStatus> {
             reduceTasks.put(taskID, (ReduceTask)task);
     }
 
-    public synchronized List<MapTask> getMapTasks() {
-        return new ArrayList<MapTask>(mapTasks.values());
+    /**
+     * Note: this method is not thread safe. A lock on the task must be held
+     * while calling this method and using the iterable!
+     */
+    public Iterable<MapTask> getMapTasks() {
+        return mapTasks.values();
     }
 
+    /**
+     * Note: this method is not thread safe. A lock on the task must be held
+     * while calling this method and using the iterable!
+     */
+    public Iterable<ReduceTask> getReduceTasks() {
+        return reduceTasks.values();
+    }
+    
     @Override
     public synchronized JobStatus toImmutableStatus() {
-        return new JobStatus(id, state, phase, toTaskStatuses(mapTasks), toTaskStatuses(reduceTasks));
-    }
-
-    private static Iterable<TaskStatus> toTaskStatuses(Map<TaskID, ? extends Task> taskMap) {
-        Collection<? extends Task> tasks = taskMap.values();
-        TaskStatus[] taskStatuses = new TaskStatus[tasks.size()];
-        int i = 0;
-        for (Task task : tasks)
-            taskStatuses[i++] = task.toImmutableStatus();
-        return Arrays.asList(taskStatuses);
+        return new JobStatus(this);
     }
 
     public synchronized boolean updateStatus(TaskAttemptStatus[] attemptStatuses, int offset, int length) {
@@ -119,10 +124,12 @@ public class Job extends Status<JobID, JobStatus> {
                 newState = computeState(reduceTasks.values());
                 break;
         }
-        if (state != newState) {
-            state = newState;
-            if (state == State.SUCCEEDED && phase == Phase.MAP) {
-                state = State.CREATED;
+        if (getState() != newState) {
+            setState(newState);
+            if (getState() == State.SUCCEEDED && phase == Phase.MAP) {
+                // save map state (timers)
+                mapStatus = new Status<JobID, ImmutableStatus<JobID>>(this);
+                setState(State.CREATED);
                 phase = Phase.REDUCE;
             }
             return true;

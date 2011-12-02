@@ -1,7 +1,6 @@
 package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,17 +43,19 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
         return null;
     }
 
-    @Override
-    public synchronized TaskStatus toImmutableStatus() {
-        return new TaskStatus(id, state, toAttemptStatuses(attempts));
+    /**
+     * Note: this method is not thread safe. A lock on the task must be held
+     * while calling this method and using the iterable!
+     * 
+     * @return
+     */
+    public Iterable<TaskAttempt> getAttempts() {
+        return attempts.values();
     }
 
-    private static Iterable<TaskAttemptStatus> toAttemptStatuses(Map<TaskAttemptID, ? extends TaskAttempt> attempts) {
-        TaskAttemptStatus[] attemptStatuses = new TaskAttemptStatus[attempts.size()];
-        int i = 0;
-        for (TaskAttempt attempt : attempts.values())
-            attemptStatuses[i++] = attempt.toImmutableStatus();
-        return Arrays.asList(attemptStatuses);
+    @Override
+    public synchronized TaskStatus toImmutableStatus() {
+        return new TaskStatus(this);
     }
 
     public synchronized boolean updateStatus(TaskAttemptStatus[] statuses, int offset, int length) {
@@ -69,8 +70,8 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
 
     private synchronized boolean updateStatus() {
         State newState = computeState();
-        if (state != newState) {
-            state = newState;
+        if (getState() != newState) {
+            setState(newState);
             return true;
         }
         return false;

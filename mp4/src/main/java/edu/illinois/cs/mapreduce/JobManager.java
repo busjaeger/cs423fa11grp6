@@ -225,14 +225,15 @@ public class JobManager implements JobManagerService {
         // 1. create reduce task
         TaskID taskID = new TaskID(job.getId(), 1, false);
         // collect all map output paths
-        List<MapTask> mapTasks = job.getMapTasks();
-        List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>(mapTasks.size());
-        for (MapTask mapTask : mapTasks) {
-            TaskAttempt attempt = mapTask.getSuccessfulAttempt();
-            if (attempt == null)
-                throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
-            QualifiedPath qPath = new QualifiedPath(attempt.getTargetNodeID(), attempt.getOutputPath());
-            inputPaths.add(qPath);
+        List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>();
+        synchronized (job) {
+            for (MapTask mapTask : job.getMapTasks()) {
+                TaskAttempt attempt = mapTask.getSuccessfulAttempt();
+                if (attempt == null)
+                    throw new IllegalStateException("Map task " + mapTask.getId() + " does not have a succeeded attempt");
+                QualifiedPath qPath = new QualifiedPath(attempt.getTargetNodeID(), attempt.getOutputPath());
+                inputPaths.add(qPath);
+            }
         }
         ReduceTask task = new ReduceTask(taskID, inputPaths);
 

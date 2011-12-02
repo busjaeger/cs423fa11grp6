@@ -2,8 +2,6 @@ package edu.illinois.cs.mapreduce;
 
 import java.io.Serializable;
 
-import edu.illinois.cs.mapreduce.Status.State;
-
 /**
  * thread safe
  * 
@@ -16,10 +14,10 @@ public class TaskAttemptStatus extends ImmutableStatus<TaskAttemptID> implements
     private final NodeID targetNodeID;
     private final String message;
 
-    public TaskAttemptStatus(TaskAttemptID id, State state, NodeID targetNodeID, String message) {
-        super(id, state);
-        this.targetNodeID = targetNodeID;
-        this.message = message;
+    public TaskAttemptStatus(TaskAttempt attempt) {
+        super(attempt);
+        this.targetNodeID = attempt.getTargetNodeID();
+        this.message = attempt.getMessage();
     }
 
     public NodeID getTargetNodeID() {
