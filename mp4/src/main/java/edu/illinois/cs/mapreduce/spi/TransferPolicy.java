@@ -1,4 +1,6 @@
-package edu.illinois.cs.mapreduce;
+package edu.illinois.cs.mapreduce.spi;
+
+import edu.illinois.cs.mapreduce.NodeStatus;
 
 public interface TransferPolicy {
 
@@ -10,6 +12,13 @@ public interface TransferPolicy {
                     if (status.getQueueLength() > 0)
                         return true;
             }
+            return false;
+        }
+    }
+
+    public static class NeverTransferPolicy implements TransferPolicy {
+        @Override
+        public boolean isTransferNeeded(NodeStatus newStatus, Iterable<NodeStatus> statuses) {
             return false;
         }
     }

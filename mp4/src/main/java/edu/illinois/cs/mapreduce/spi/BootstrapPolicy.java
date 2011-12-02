@@ -1,7 +1,11 @@
-package edu.illinois.cs.mapreduce;
+package edu.illinois.cs.mapreduce.spi;
 
 import java.util.List;
 import java.util.Map;
+
+import edu.illinois.cs.mapreduce.NodeConfiguration;
+import edu.illinois.cs.mapreduce.NodeID;
+import edu.illinois.cs.mapreduce.NodeStatus;
 
 public interface BootstrapPolicy {
 

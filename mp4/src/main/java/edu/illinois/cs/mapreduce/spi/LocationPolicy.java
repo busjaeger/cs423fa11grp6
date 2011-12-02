@@ -1,4 +1,7 @@
-package edu.illinois.cs.mapreduce;
+package edu.illinois.cs.mapreduce.spi;
+
+import edu.illinois.cs.mapreduce.NodeID;
+import edu.illinois.cs.mapreduce.NodeStatus;
 
 
 public interface LocationPolicy {
@@ -10,38 +13,13 @@ public interface LocationPolicy {
     public static class ScoreBasedLocationPolicy implements LocationPolicy {
 
         /**
-         * Searches through list of idle nodes to find the least busy node
-         * 
-         * @param list of idle nodes' statuses
-         * @return NodeID of least busy node
-         */
-        @Override
-        public NodeID source(Iterable<NodeStatus> nodeStatuses) {
-            NodeID idlest = null;
-            double idlestScore = 1000.0;
-            for (NodeStatus nodeStatus : nodeStatuses) {
-                if (idlest == null) {
-                    idlest = nodeStatus.getNodeID();
-                    idlestScore = computeNodeScore(nodeStatus);
-                } else {
-                    double myScore = computeNodeScore(nodeStatus);
-                    if (myScore < idlestScore) {
-                        idlest = nodeStatus.getNodeID();
-                        idlestScore = myScore;
-                    }
-                }
-            }
-            return idlest;
-        }
-
-        /**
          * Searches through list of busy nodes to find the busiest node
          * 
          * @param list of busy nodes' statuses
          * @return NodeID of busiest node
          */
         @Override
-        public NodeID target(Iterable<NodeStatus> nodeStatuses) {
+        public NodeID source(Iterable<NodeStatus> nodeStatuses) {
             NodeID busiest = null;
             double busiestScore = 0.0;
             for (NodeStatus nodeStatus : nodeStatuses) {
@@ -59,6 +37,31 @@ public interface LocationPolicy {
                 }
             }
             return busiest;
+        }
+
+        /**
+         * Searches through list of idle nodes to find the least busy node
+         * 
+         * @param list of idle nodes' statuses
+         * @return NodeID of least busy node
+         */
+        @Override
+        public NodeID target(Iterable<NodeStatus> nodeStatuses) {
+            NodeID idlest = null;
+            double idlestScore = 1000.0;
+            for (NodeStatus nodeStatus : nodeStatuses) {
+                if (idlest == null) {
+                    idlest = nodeStatus.getNodeID();
+                    idlestScore = computeNodeScore(nodeStatus);
+                } else {
+                    double myScore = computeNodeScore(nodeStatus);
+                    if (myScore < idlestScore) {
+                        idlest = nodeStatus.getNodeID();
+                        idlestScore = myScore;
+                    }
+                }
+            }
+            return idlest;
         }
 
         /**

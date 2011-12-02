@@ -93,13 +93,13 @@ class TaskExecutor implements TaskExecutorService {
     }
 
     private int computeSleepForInterval() {
-    	double interval = ((100.0 - this.throttle) / 100.0) * this.throttleInterval;
-    	return (int)interval;
+        double interval = ((100.0 - this.throttle) / 100.0) * this.throttleInterval;
+        return (int)interval;
     }
-    
+
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
-    	int sleepFor = this.computeSleepForInterval();
+        int sleepFor = this.computeSleepForInterval();
         Semaphore completion = new Semaphore(0);
         TaskRunner runner = new TaskRunner(sleepFor, task, completion, node);
         synchronized (executions) {
@@ -169,29 +169,33 @@ class TaskExecutor implements TaskExecutorService {
                     Thread.currentThread().interrupt();
                     return;
                 }
-                Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
-                synchronized (executions) {
-                    for (NodeID nodeId: node.getNodeIds()) {
-                        List<TaskAttemptStatus> status = new ArrayList<TaskAttemptStatus>();
-                        map.put(nodeId, status);
-                        // could index by node to avoid repeated iteration
-                        for (TaskExecution execution : executions.values())
-                            status.add(execution.getTask().toImmutableStatus());
+                try {
+                    Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
+                    synchronized (executions) {
+                        for (NodeID nodeId : node.getNodeIds()) {
+                            List<TaskAttemptStatus> status = new ArrayList<TaskAttemptStatus>();
+                            map.put(nodeId, status);
+                            // could index by node to avoid repeated iteration
+                            for (TaskExecution execution : executions.values()) {
+                                TaskExecutorTask task = execution.getTask();
+                                if (task.getNodeID().equals(nodeId))
+                                    status.add(task.toImmutableStatus());
+                            }
+                        }
                     }
-                }
-                int queueLength = executorService.getQueue().size();
-                TaskExecutorStatus status;
-                synchronized (this) {
-                    status = new TaskExecutorStatus(config.nodeId, cpuUtilization, queueLength, throttle);
-                }
-                for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
-                    JobManagerService jobManager = node.getJobManagerService(entry.getKey());
-                    TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
-                    try {
+                    int queueLength = executorService.getQueue().size();
+                    TaskExecutorStatus status;
+                    synchronized (this) {
+                        status = new TaskExecutorStatus(config.nodeId, cpuUtilization, queueLength, throttle);
+                    }
+                    for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
+                        JobManagerService jobManager = node.getJobManagerService(entry.getKey());
+                        TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
                         jobManager.updateStatus(status, statuses);
-                    } catch (IOException e) {
-                        System.out.println("Failed to contact node "+entry.getKey());
                     }
+                } catch (Throwable t) {
+                    System.out.println("failed to update status");
+                    t.printStackTrace();
                 }
             }
         }

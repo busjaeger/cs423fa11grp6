@@ -50,7 +50,12 @@ public class Node {
         NodeConfiguration config = (cfg == null) ? NodeConfiguration.load() : NodeConfiguration.load(new File(cfg));
         FileSystem fileSystem = new FileSystem(config);
         TaskExecutor taskExecutor = new TaskExecutor(config);
-        JobManager jobManager = new JobManager(config);
+        JobManager jobManager;
+        try {
+            jobManager = new JobManager(config);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
 
         Map<NodeID, NodeServices> nodeMap = new HashMap<NodeID, NodeServices>();
         for (Entry<NodeID, Endpoint> node : config.nodeMap.entrySet()) {

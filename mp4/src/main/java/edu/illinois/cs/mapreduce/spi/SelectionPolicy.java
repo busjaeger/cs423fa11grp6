@@ -1,9 +1,13 @@
-package edu.illinois.cs.mapreduce;
+package edu.illinois.cs.mapreduce.spi;
 
 import static edu.illinois.cs.mapreduce.Status.State.CREATED;
 import static edu.illinois.cs.mapreduce.Status.State.RUNNING;
 import static edu.illinois.cs.mapreduce.Status.State.WAITING;
+import edu.illinois.cs.mapreduce.Job;
+import edu.illinois.cs.mapreduce.MapTask;
+import edu.illinois.cs.mapreduce.NodeID;
 import edu.illinois.cs.mapreduce.Status.State;
+import edu.illinois.cs.mapreduce.TaskAttempt;
 
 public interface SelectionPolicy {
 

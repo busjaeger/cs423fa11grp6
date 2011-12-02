@@ -19,14 +19,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import edu.illinois.cs.mapreduce.BootstrapPolicy.RoundRobinBootstrapPolicy;
-import edu.illinois.cs.mapreduce.LocationPolicy.ScoreBasedLocationPolicy;
-import edu.illinois.cs.mapreduce.SelectionPolicy.DefaultSelectionPolicy;
 import edu.illinois.cs.mapreduce.Status.State;
-import edu.illinois.cs.mapreduce.TransferPolicy.IdleTransferPolicy;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
+import edu.illinois.cs.mapreduce.spi.BootstrapPolicy;
+import edu.illinois.cs.mapreduce.spi.LocationPolicy;
+import edu.illinois.cs.mapreduce.spi.SelectionPolicy;
+import edu.illinois.cs.mapreduce.spi.TransferPolicy;
 
 /**
  * This job manager splits jobs into individual tasks and distributes them to
@@ -46,12 +46,23 @@ public class JobManager implements JobManagerService {
     private final Map<JobID, Job> jobs;
     private final Map<NodeID, NodeStatus> nodeStatuses;
 
-    JobManager(NodeConfiguration config) {
+    JobManager(NodeConfiguration config) throws Exception {
+        this(config, ReflectionUtil.<TransferPolicy> newInstance(config.jmTransferPolicyClass, config), ReflectionUtil
+            .<BootstrapPolicy> newInstance(config.jmBootstrapPolicyClass, config), ReflectionUtil
+            .<LocationPolicy> newInstance(config.jmLocationPolicyClass, config), ReflectionUtil
+            .<SelectionPolicy> newInstance(config.jmSelectionPolicyClass, config));
+    }
+
+    JobManager(NodeConfiguration config,
+               TransferPolicy transferPolicy,
+               BootstrapPolicy bootstrapPolicy,
+               LocationPolicy locationPolicy,
+               SelectionPolicy selectionPolicy) {
         this.config = config;
-        this.bootstrapPolicy = new RoundRobinBootstrapPolicy();
-        this.transferPolicy = new IdleTransferPolicy();
-        this.locationPolicy = new ScoreBasedLocationPolicy();
-        this.selectionPolicy = new DefaultSelectionPolicy();
+        this.transferPolicy = transferPolicy;
+        this.bootstrapPolicy = bootstrapPolicy;
+        this.locationPolicy = locationPolicy;
+        this.selectionPolicy = selectionPolicy;
         this.counter = new AtomicInteger();
         this.jobs = new TreeMap<JobID, Job>();
         this.nodeStatuses = new TreeMap<NodeID, NodeStatus>();
@@ -391,20 +402,22 @@ public class JobManager implements JobManagerService {
                 source = locationPolicy.source(nodeStatuses.values());
                 target = locationPolicy.target(nodeStatuses.values());
             }
+            if (!source.equals(config.nodeId))
+                return;
             if (source == target) {
-                System.out.println("Same source and target selected");
+                System.err.println("Same source and target selected");
                 return;
             }
             TaskAttempt attempt;
             synchronized (jobs) {
-                attempt = selectionPolicy.selectAttempt(target, jobs.values());
+                attempt = selectionPolicy.selectAttempt(source, jobs.values());
             }
             if (attempt == null) {
-                System.out.println("No suitable task found for transfer from " + source);
+                System.out.println("No suitable task found to transfer from " + source + " to " + target);
                 return;
             }
             transferTask(target, attempt);
-        } catch (IOException e) {
+        } catch (Throwable e) {
             e.printStackTrace();
         } finally {
             transferring = false;

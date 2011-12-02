@@ -10,6 +10,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
+import edu.illinois.cs.mapreduce.spi.BootstrapPolicy.RoundRobinBootstrapPolicy;
+import edu.illinois.cs.mapreduce.spi.LocationPolicy.ScoreBasedLocationPolicy;
+import edu.illinois.cs.mapreduce.spi.SelectionPolicy.DefaultSelectionPolicy;
+import edu.illinois.cs.mapreduce.spi.TransferPolicy.IdleTransferPolicy;
+
 public class NodeConfiguration {
 
     public static NodeConfiguration load() throws IOException {
@@ -39,14 +44,20 @@ public class NodeConfiguration {
 
         File fsRootDir = new File(props.getProperty("fs.root.dir", "/tmp/node1"));
 
+        String jmBootstrapPolicyClass = props.getProperty("jm.boostrap.policy", RoundRobinBootstrapPolicy.class.getName());
+        String jmTransferPolicyClass = props.getProperty("jm.transfer.policy", IdleTransferPolicy.class.getName());
+        String jmLocationPolicyClass = props.getProperty("jm.location.policy", ScoreBasedLocationPolicy.class.getName());
+        String jmSelectionPolicyClass = props.getProperty("jm.selection.policy", DefaultSelectionPolicy.class.getName());
+
         int teNumThreads = toPositiveInt(props.getProperty("te.num.threads", "1"));
         double teThrottle = Double.parseDouble(props.getProperty("te.throttle", "0.0"));
         int teThrottleInterval = Integer.parseInt(props.getProperty("te.throttleInterval", "1000"));
         int teStatusUpdateInterval = toPositiveInt(props.getProperty("te.status.update.interval", "5000"));
         int teCpuProfilingInterval = toPositiveInt(props.getProperty("te.cpu.profiling.interval", "5000"));
 
-        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, teThrottleInterval,
-        							 teStatusUpdateInterval, teCpuProfilingInterval, fsRootDir);
+        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, jmBootstrapPolicyClass,
+                                     jmTransferPolicyClass, jmLocationPolicyClass, jmSelectionPolicyClass,
+                                     teThrottleInterval, teStatusUpdateInterval, teCpuProfilingInterval, fsRootDir);
     }
 
     private static int toPort(String value) {
@@ -96,6 +107,11 @@ public class NodeConfiguration {
     public final int port;
     public final Map<NodeID, Endpoint> nodeMap;
 
+    public final String jmBootstrapPolicyClass;
+    public final String jmTransferPolicyClass;
+    public final String jmLocationPolicyClass;
+    public final String jmSelectionPolicyClass;
+
     // task executor configuration
     public final int teNumThreads;
     public final double teThrottle;
@@ -108,16 +124,24 @@ public class NodeConfiguration {
 
     public NodeConfiguration(NodeID nodeId,
                              int port,
-                             Map<NodeID, Endpoint> remoteNodes,
+                             Map<NodeID, Endpoint> nodeMap,
                              int teNumThreads,
                              double teThrottle,
+                             String jmBootstrapPolicyClass,
+                             String jmTransferPolicyClass,
+                             String jmLocationPolicyClass,
+                             String jmSelectionPolicyClass,
                              int teThrottleInterval,
                              int teStatusUpdateInterval,
                              int teCpuProfilingInterval,
                              File fsRootDir) {
         this.nodeId = nodeId;
         this.port = port;
-        this.nodeMap = remoteNodes;
+        this.nodeMap = nodeMap;
+        this.jmBootstrapPolicyClass = jmBootstrapPolicyClass;
+        this.jmTransferPolicyClass = jmTransferPolicyClass;
+        this.jmLocationPolicyClass = jmLocationPolicyClass;
+        this.jmSelectionPolicyClass = jmSelectionPolicyClass;
         this.teNumThreads = teNumThreads;
         this.teThrottle = teThrottle;
         this.teThrottleInterval = teThrottleInterval;
