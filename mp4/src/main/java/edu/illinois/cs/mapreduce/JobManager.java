@@ -17,6 +17,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import edu.illinois.cs.mapreduce.Job.Phase;
@@ -55,6 +56,14 @@ public class JobManager implements JobManagerService {
     @Override
     public void stop() {
         // nothing to do
+    }
+    
+    /**
+     * Returns an array of job IDs
+     * @return
+     */
+    public JobID[] getJobIDs()  {
+        return (JobID[]) jobs.keySet().toArray();
     }
 
     /**
@@ -269,6 +278,10 @@ public class JobManager implements JobManagerService {
     @Override
     public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] taskStatuses) throws IOException {
         boolean stateChange = false;
+        
+        //TODO: OK here?
+        UpdateNodeHealth(status);
+        
         if (taskStatuses.length > 0) {
             int offset = 0, len = 1;
             JobID jobId = taskStatuses[0].getJobID();
@@ -284,12 +297,9 @@ public class JobManager implements JobManagerService {
                 }
             }
             stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
+            
         }
         
-        //TODO: Is this a good place to check for rebalancing?
-        UpdateNodeHealth(status);
-        CheckLoadDistribution();
-
         return stateChange;
     }
 
@@ -323,6 +333,11 @@ public class JobManager implements JobManagerService {
                 });
             }
         }
+        
+        //TODO: Is this a good place to check for rebalancing?
+        JobStatus js = job.toImmutableStatus();
+        CheckLoadDistribution(js);
+        
         return stateChanged;
     }
     
@@ -330,7 +345,7 @@ public class JobManager implements JobManagerService {
      * Reviews the stored node status information and determines if a rebalance 
      * will occur.
      */
-    private void CheckLoadDistribution() {
+    private void CheckLoadDistribution(JobStatus js) {
         NodeID free = null, busy = null;
         
         ArrayList<NodeStatus> idleNodeStats = new ArrayList<NodeStatus>();
@@ -374,7 +389,7 @@ public class JobManager implements JobManagerService {
             busy = FindBusiestNode(busyNodeStats);
             free = FindIdlestNode(idleNodeStats);
             assert(busy != free);
-            RebalanceTasks(busy, free);
+            RebalanceTasks(js, busy, free);
         }
     }
     
@@ -477,7 +492,17 @@ public class JobManager implements JobManagerService {
      * @param busy
      * @param free
      */
-    private void RebalanceTasks(NodeID busy, NodeID free) {
-        //TODO: cancel task on busy node and execute it on free node
+    private void RebalanceTasks(JobStatus js, NodeID busy, NodeID free) {
+        for (TaskStatus task : js.getMapTaskStatuses()) {
+            if(task.getState() == State.WAITING)
+                for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                    if (attempt.getState() == State.WAITING && attempt.getTargetNodeID() == busy) {
+                        if(node.getTaskExecutorService(busy).cancel(attempt.getId(), 10, TimeUnit.SECONDS)) {
+                            node.getTaskExecutorService(free).execute(task);      //TODO: execute task on free node
+                            node.getTaskExecutorService(busy).delete(attempt.getId()); 
+                        }
+                    }
+                }
+        }
     }
 }

@@ -196,6 +196,11 @@ public class Node {
         public JobStatus getJobStatus(JobID jobID) throws IOException {
             return jobManager.getJobStatus(jobID);
         }
+        
+        @Override
+        public JobID[] getJobIDs() {
+            return jobManager.getJobIDs();
+        }
 
         @Override
         public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] statuses) throws IOException {
