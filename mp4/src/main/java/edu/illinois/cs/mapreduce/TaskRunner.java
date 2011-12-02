@@ -30,13 +30,15 @@ class TaskRunner implements Runnable {
     private final TaskExecutorTask task;
     private final Node node;
     private final Semaphore completion;
+    private final int sleepInterval;
 
     private FileSystem fileSystem;
     private ClassLoader classLoader;
     private JobDescriptor descriptor;
 
-    public TaskRunner(TaskExecutorTask task, Semaphore completion, Node node) {
-        this.task = task;
+    public TaskRunner(int sleepForInterval, TaskExecutorTask task, Semaphore completion, Node node) {
+        this.sleepInterval = sleepForInterval;
+    	this.task = task;
         this.completion = completion;
         this.node = node;
     }
@@ -52,6 +54,7 @@ class TaskRunner implements Runnable {
     @Override
     public void run() {
         try {
+        	Thread.sleep(this.sleepInterval);
             task.setState(State.RUNNING);
             init();
             if (task.isMap())

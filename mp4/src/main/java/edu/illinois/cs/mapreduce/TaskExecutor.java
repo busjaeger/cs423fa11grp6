@@ -53,6 +53,7 @@ class TaskExecutor implements TaskExecutorService {
     private Future<?> statusUpdateFuture;
     private double throttle;
     private double cpuUtilization;
+    private double throttleInterval;
 
     TaskExecutor(NodeConfiguration config) {
         this.config = config;
@@ -61,6 +62,7 @@ class TaskExecutor implements TaskExecutorService {
         this.throttle = config.teThrottle;
         this.cpuProfilingInterval = config.teCpuProfilingInterval;
         this.statusUpdateInterval = config.teStatusUpdateInterval;
+        this.throttleInterval = config.teThrottleInterval;
         this.timer = new Timer();
     }
 
@@ -87,10 +89,16 @@ class TaskExecutor implements TaskExecutorService {
         this.cpuUtilization = cpuUtilization;
     }
 
+    private int computeSleepForInterval() {
+    	double interval = ((100.0 - this.throttle) / 100.0) * this.throttleInterval;
+    	return (int)interval;
+    }
+    
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
+    	int sleepFor = this.computeSleepForInterval();
         Semaphore completion = new Semaphore(0);
-        TaskRunner runner = new TaskRunner(task, completion, node);
+        TaskRunner runner = new TaskRunner(sleepFor, task, completion, node);
         Future<?> future = executorService.submit(runner);
         synchronized (executions) {
             executions.put(task.getId(), new TaskAttemptExecution(future, task, completion));

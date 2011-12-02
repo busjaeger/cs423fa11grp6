@@ -41,11 +41,12 @@ public class NodeConfiguration {
 
         int teNumThreads = toPositiveInt(props.getProperty("te.num.threads", "1"));
         double teThrottle = Double.parseDouble(props.getProperty("te.throttle", "0.0"));
+        int teThrottleInterval = Integer.parseInt(props.getProperty("te.throttleInterval", "1000"));
         int teStatusUpdateInterval = toPositiveInt(props.getProperty("te.status.update.interval", "5000"));
         int teCpuProfilingInterval = toPositiveInt(props.getProperty("te.cpu.profiling.interval", "5000"));
 
-        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, teStatusUpdateInterval,
-                                     teCpuProfilingInterval, fsRootDir);
+        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, teThrottleInterval,
+        							 teStatusUpdateInterval, teCpuProfilingInterval, fsRootDir);
     }
 
     private static int toPort(String value) {
@@ -98,6 +99,7 @@ public class NodeConfiguration {
     // task executor configuration
     public final int teNumThreads;
     public final double teThrottle;
+    public final int teThrottleInterval;
     public final int teStatusUpdateInterval;
     public final int teCpuProfilingInterval;
 
@@ -109,6 +111,7 @@ public class NodeConfiguration {
                              Map<NodeID, Endpoint> remoteNodes,
                              int teNumThreads,
                              double teThrottle,
+                             int teThrottleInterval,
                              int teStatusUpdateInterval,
                              int teCpuProfilingInterval,
                              File fsRootDir) {
@@ -117,6 +120,7 @@ public class NodeConfiguration {
         this.nodeMap = remoteNodes;
         this.teNumThreads = teNumThreads;
         this.teThrottle = teThrottle;
+        this.teThrottleInterval = teThrottleInterval;
         this.teStatusUpdateInterval = teStatusUpdateInterval;
         this.teCpuProfilingInterval = teCpuProfilingInterval;
         this.fsRootDir = fsRootDir;
