@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?><launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
-<listEntry value="/mp4/src/main/java/edu/illinois/cs/mapreduce/Node.java"/>
+<listEntry value="/mp4/src/main/java/edu/illinois/cs/mr/Node.java"/>
 </listAttribute>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
 <listEntry value="1"/>
 </listAttribute>
 <mapAttribute key="org.eclipse.debug.core.preferred_launchers"/>
-<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.mapreduce.Node"/>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="edu.illinois.cs.mr.Node"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="-config ${project_loc:/mp4}/src/test/resources/sample/node1.properties"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="mp4"/>
 </launchConfiguration>

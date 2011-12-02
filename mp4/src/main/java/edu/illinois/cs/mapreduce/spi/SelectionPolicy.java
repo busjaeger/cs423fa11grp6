@@ -1,36 +1,11 @@
 package edu.illinois.cs.mapreduce.spi;
 
-import static edu.illinois.cs.mapreduce.Status.State.CREATED;
-import static edu.illinois.cs.mapreduce.Status.State.RUNNING;
-import static edu.illinois.cs.mapreduce.Status.State.WAITING;
-import edu.illinois.cs.mapreduce.Job;
-import edu.illinois.cs.mapreduce.MapTask;
-import edu.illinois.cs.mapreduce.NodeID;
-import edu.illinois.cs.mapreduce.Status.State;
-import edu.illinois.cs.mapreduce.TaskAttempt;
+import edu.illinois.cs.mr.NodeID;
+import edu.illinois.cs.mr.jm.Job;
+import edu.illinois.cs.mr.jm.TaskAttempt;
 
-public interface SelectionPolicy {
+public abstract class SelectionPolicy {
 
-    public static class DefaultSelectionPolicy implements SelectionPolicy {
-        @Override
-        public TaskAttempt selectAttempt(NodeID nodeID, Iterable<Job> jobs) {
-            TaskAttempt candidate = null;
-            for (Job job : jobs) {
-                // we currently do not swap reducers
-                for (MapTask task : job.getMapTasks())
-                    for (TaskAttempt attempt : task.getAttempts())
-                        if (attempt.getTargetNodeID().equals(nodeID)) {
-                            State state = attempt.getState();
-                            if (state == CREATED || state == WAITING)
-                                return attempt;
-                            else if (state == RUNNING)
-                                candidate = attempt;
-                        }
-            }
-            return candidate;
-        }
-    }
-
-    TaskAttempt selectAttempt(NodeID nodeID, Iterable<Job> jobs);
+    public abstract TaskAttempt selectAttempt(NodeID nodeID, Iterable<Job> jobs);
 
 }
