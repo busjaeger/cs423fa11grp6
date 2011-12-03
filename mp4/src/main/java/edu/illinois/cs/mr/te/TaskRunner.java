@@ -37,12 +37,14 @@ class TaskRunner implements Runnable {
     private final TaskExecutorTask task;
     private final Node node;
     private final Semaphore completion;
+    private final TaskExecutor parent;
 
     private FileSystem fileSystem;
     private ClassLoader classLoader;
     private JobDescriptor descriptor;
 
-    public TaskRunner(TaskExecutorTask task, Semaphore completion, Node node) {
+    public TaskRunner(TaskExecutor parent, TaskExecutorTask task, Semaphore completion, Node node) {
+    	this.parent = parent;
     	this.task = task;
         this.completion = completion;
         this.node = node;
@@ -75,6 +77,11 @@ class TaskRunner implements Runnable {
                 throw (Error)t;
         } finally {
             completion.release();
+          	try {
+          		Thread.sleep(this.parent.done(task));
+          	} catch (Exception e) {
+          		e.printStackTrace();
+          	}
         }
     }
 
