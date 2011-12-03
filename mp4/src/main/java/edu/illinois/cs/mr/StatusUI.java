@@ -36,6 +36,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     private JLabel treeLabel, labelID, labelState, labelDetail, labelMessage;
     private JTree tree;
     private DefaultMutableTreeNode root;
+    private int nodeId;
     private DefaultTreeModel treeModel;
     static NodeServices services;
     
@@ -120,7 +121,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         
         try {
             if(type.startsWith("Job")) {
-                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(id));
+                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + id));
                 labelState.setText("State: \t" + js.getState());
                 labelState.setVisible(true);
                 labelDetail.setText("Phase: \t" + js.getPhase());
@@ -130,7 +131,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
             else if(type.startsWith("Task")) {
                 DefaultMutableTreeNode jobnode = (DefaultMutableTreeNode)node.getParent();
                 String jobid = ((String)jobnode.getUserObject()).split(" ")[1];
-                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(jobid));
+                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 for (TaskStatus task : js.getTaskStatuses(Phase.MAP)) {
                     if(task.getId().getValue() == Integer.parseInt(id)) {
                         labelState.setText("State: \t" + task.getState());
@@ -146,7 +147,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                 String taskid = ((String)tasknode.getUserObject()).split(" ")[1];
                 DefaultMutableTreeNode jobnode = (DefaultMutableTreeNode)tasknode.getParent();
                 String jobid = ((String)jobnode.getUserObject()).split(" ")[1];
-                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(jobid));
+                JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 for (TaskStatus task : js.getTaskStatuses(Phase.MAP)) {
                     if(task.getId().getValue() == Integer.parseInt(taskid)) {
                         for (AttemptStatus attempt : task.getAttemptStatuses()) {
@@ -185,7 +186,6 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                 System.out.println("Error connecting to node.\n");
                 System.exit(2);
             } 
-            
         
         StatusUI frame = new StatusUI();
         
@@ -233,7 +233,9 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         treeLabel.setSize(300,20);
         pane.add(treeLabel);
         
-        root = new DefaultMutableTreeNode("Jobs");
+        nodeId = services.getNodeID().getValue();
+        
+        root = new DefaultMutableTreeNode("Node "+nodeId);
         treeModel = new DefaultTreeModel(root);
         tree = new JTree(treeModel);
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
