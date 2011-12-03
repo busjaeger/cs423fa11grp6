@@ -156,7 +156,6 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     }
 
     public static void main(String[] args) {
-        StatusUI frame = new StatusUI();
         String host;
         int port;
         if (args.length > 2 && args[1].equals("-n")) {
@@ -168,11 +167,14 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
             port = 60001;
         }
         try {
-        services = RPC.newClient(host, port, NodeServices.class);
-        } catch(IOException ioe) {
-            System.out.println("Error connecting to node.\n");
-            System.exit(2);
-        } 
+            services = RPC.newClient(host, port, NodeServices.class);
+            } catch(IOException ioe) {
+                System.out.println("Error connecting to node.\n");
+                System.exit(2);
+            } 
+            
+        
+        StatusUI frame = new StatusUI();
         
         frame.setVisible(true);
     }
