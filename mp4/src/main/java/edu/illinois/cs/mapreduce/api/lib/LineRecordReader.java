@@ -7,6 +7,11 @@ import java.io.InputStreamReader;
 
 import edu.illinois.cs.mapreduce.api.RecordReader;
 
+/**
+ * Reads line number + line records
+ * 
+ * @author benjamin
+ */
 public class LineRecordReader extends RecordReader<Long, String> {
 
     private final BufferedReader reader;

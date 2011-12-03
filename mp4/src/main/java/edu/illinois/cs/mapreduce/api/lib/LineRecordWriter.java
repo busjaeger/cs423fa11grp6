@@ -7,12 +7,21 @@ import java.io.Writer;
 
 import edu.illinois.cs.mapreduce.api.RecordWriter;
 
-public class TextRecordWriter<K, V> extends RecordWriter<K, V> {
+/**
+ * A RecordWriter implementation that produces line-based text output files by
+ * calling the 'toString' method on keys and values. The key/value separator is
+ * configurable.
+ * 
+ * @author benjamin
+ * @param <K> type of key
+ * @param <V> type of value
+ */
+public class LineRecordWriter<K, V> extends RecordWriter<K, V> {
 
     private final Writer writer;
     private final String separator;
 
-    public TextRecordWriter(OutputStream os, String separator) {
+    public LineRecordWriter(OutputStream os, String separator) {
         this.writer = new OutputStreamWriter(os);
         this.separator = separator;
     }

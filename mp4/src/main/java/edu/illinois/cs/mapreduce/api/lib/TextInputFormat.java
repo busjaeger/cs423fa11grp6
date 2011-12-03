@@ -6,6 +6,12 @@ import java.util.Properties;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 
+/**
+ * Implementation of a line-based text input file. Text files are split by line
+ * number.
+ * 
+ * @author benjamin
+ */
 public class TextInputFormat extends InputFormat<Long, String, TextSplit> {
 
     private static final String LPP = "text.input.format.lines.per.split";

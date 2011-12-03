@@ -212,7 +212,7 @@ public class JobManager implements JobManagerService {
 
     /**
      * the only purpose of this complex chunk of code is to turn the
-     * OutputStream the partitioner needs into an InputStream for the file
+     * OutputStream the splitter needs into an InputStream for the file
      * system
      * @throws InterruptedException 
      */

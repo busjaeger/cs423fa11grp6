@@ -10,8 +10,12 @@ import java.io.Writer;
 
 import edu.illinois.cs.mapreduce.api.Splitter;
 
-// TODO could be enhanced to read lines for given
-// numbers of bits as opposed to number of lines
+/**
+ * Splits a text file into a number of separate text files based on the
+ * configurable number of lines.
+ * 
+ * @author benjamin
+ */
 public class TextSplitter extends Splitter<TextSplit> {
 
     private final BufferedReader reader;
