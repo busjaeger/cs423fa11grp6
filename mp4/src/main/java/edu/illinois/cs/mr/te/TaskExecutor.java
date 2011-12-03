@@ -63,6 +63,10 @@ public class TaskExecutor implements TaskExecutorService {
     // mutable state
     private final Map<AttemptID, TaskExecution> executions;
     private double throttle;
+    private long[] taskRuntimes;
+    private int index;
+    private int capacity;
+    private long averageRuntime;
 
     public TaskExecutor(NodeConfiguration config) {
         this.config = config;
@@ -72,6 +76,10 @@ public class TaskExecutor implements TaskExecutorService {
         this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
         this.executions = new TreeMap<AttemptID, TaskExecution>();
         this.timer = new Timer();
+        this.capacity = 10;
+        this.index = 0;
+        this.taskRuntimes = new long[capacity];
+        this.averageRuntime = 0;
     }
 
     @Override
@@ -107,10 +115,27 @@ public class TaskExecutor implements TaskExecutorService {
         return executorService.getQueue().size();
     }
 
+    private void updateAverage() {
+    	long average = 0;
+    	for (long taskRuntime : this.taskRuntimes) {
+    		average += taskRuntime;
+    	}
+    	this.averageRuntime = average / capacity;
+    }
+    
+    public synchronized long done(TaskExecutorTask task) {
+    	long runtime = task.getDoneTime() - task.getBeginRunningTime();
+    	taskRuntimes[index] = runtime;
+    	int temp = (index++) % capacity;
+    	this.index = temp;
+    	this.updateAverage();    	
+    	return (this.averageRuntime / ((long)this.throttle / 100)) - this.averageRuntime;    	
+    }
+    
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
         Semaphore completion = new Semaphore(0);
-        TaskRunner runner = new TaskRunner(task, completion, node);
+        TaskRunner runner = new TaskRunner(this, task, completion, node);
         synchronized (executions) {
             task.setState(State.WAITING);
             Future<?> future = executorService.submit(runner);
