@@ -254,6 +254,11 @@ public class Node {
         }
 
         @Override
+        public boolean writeOutput(JobID jobID, File file) throws IOException {
+            return jobManager.writeOutput(jobID, file);
+        }
+
+        @Override
         public InputStream read(Path path) throws IOException {
             return fileSystem.read(path);
         }

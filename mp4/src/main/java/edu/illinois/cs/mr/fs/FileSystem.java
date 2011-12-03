@@ -80,6 +80,11 @@ public class FileSystem implements FileSystemService {
         FileUtil.copy(file, src);
     }
 
+    public void copy(File dest, Path src) throws IOException {
+        File srcFile = resolve(src);
+        FileUtil.copy(dest, srcFile);
+    }
+
     private File resolve(Path path) {
         File file = dir;
         for (String segment : path.segments())

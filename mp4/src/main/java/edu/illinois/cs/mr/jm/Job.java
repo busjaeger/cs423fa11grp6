@@ -19,7 +19,7 @@ public class Job extends PhasedStatus<JobID, JobStatus, Phase> {
 
     private static final long serialVersionUID = 5073561871061802007L;
 
-    private final Path path;
+    private final Path dir;
     private final Path jarPath;
     private final JobDescriptor descriptor;
     private final Map<TaskID, MapTask> mapTasks;
@@ -27,15 +27,15 @@ public class Job extends PhasedStatus<JobID, JobStatus, Phase> {
 
     public Job(JobID id, String jarName, JobDescriptor descriptor) {
         super(id, Phase.class);
-        this.path = new Path(id.toQualifiedString());
-        this.jarPath = path.append(jarName);
+        this.dir = new Path(id.toQualifiedString());
+        this.jarPath = dir.append(jarName);
         this.descriptor = descriptor;
         this.mapTasks = new TreeMap<TaskID, MapTask>(ID.<TaskID> getValueComparator());
         this.reduceTasks = new TreeMap<TaskID, ReduceTask>(ID.<TaskID> getValueComparator());
     }
 
-    public Path getPath() {
-        return path;
+    public Path getDir() {
+        return dir;
     }
 
     public Path getJarPath() {

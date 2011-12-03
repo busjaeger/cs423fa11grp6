@@ -53,6 +53,8 @@ public interface JobManagerService extends NodeService {
 
     JobStatus getJobStatus(JobID jobID) throws IOException;
 
+    boolean writeOutput(JobID jobID, File file) throws IOException;
+
     /**
      * @param status
      * @param statuses must be sorted by {@link AttemptID}

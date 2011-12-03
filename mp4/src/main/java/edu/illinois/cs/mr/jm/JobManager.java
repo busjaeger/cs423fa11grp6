@@ -79,11 +79,8 @@ public class JobManager implements JobManagerService {
      */
     @Override
     public JobStatus getJobStatus(JobID jobID) throws IOException {
-        Job job;
-        synchronized (jobs) {
-            job = jobs.get(jobID);
-        }
-        return job.toImmutableStatus();
+        Job job = getJob(jobID);
+        return job == null ? null : job.toImmutableStatus();
     }
 
     public Iterable<JobStatus> getJobStatuses() {
@@ -93,6 +90,21 @@ public class JobManager implements JobManagerService {
             for (Job job : jobList)
                 statuses.add(job.toImmutableStatus());
             return statuses;
+        }
+    }
+
+    @Override
+    public boolean writeOutput(JobID jobID, File file) throws IOException {
+        Job job = getJob(jobID);
+        if (job == null || job.getState() != State.SUCCEEDED)
+            return false;
+        node.getFileSystem().copy(file, job.getDir().append("output"));
+        return true;
+    }
+
+    private Job getJob(JobID jobID) {
+        synchronized (jobs) {
+            return jobs.get(jobID);
         }
     }
 
@@ -168,7 +180,7 @@ public class JobManager implements JobManagerService {
 
                 // 2. create task ID for the split
                 TaskID taskId = new TaskID(job.getId(), num, true);
-                Path inputPath = job.getPath().append(taskId + "-input");
+                Path inputPath = job.getDir().append(taskId + "-input");
 
                 // 3. write split to node's file system
                 final FileSystemService fs = node.getFileSystemService(targetNodeId);
@@ -191,7 +203,7 @@ public class JobManager implements JobManagerService {
 
                 // 6. create and register task attempt
                 AttemptID attemptID = task.nextAttemptID();
-                Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
+                Path outputPath = job.getDir().append(attemptID.toQualifiedString(1) + "-output");
                 Attempt attempt = new Attempt(attemptID, targetNodeId, outputPath);
                 task.addAttempt(attempt);
 
@@ -286,7 +298,7 @@ public class JobManager implements JobManagerService {
 
         // 2. create attempt
         AttemptID attemptId = new AttemptID(taskID, 1);
-        Path outputPath = job.getPath().append("output");
+        Path outputPath = job.getDir().append("output");
         Attempt attempt = new Attempt(attemptId, config.nodeId, outputPath);
         task.addAttempt(attempt);
 
@@ -397,7 +409,7 @@ public class JobManager implements JobManagerService {
 
         // create a new attempt
         AttemptID attemptID = task.nextAttemptID();
-        Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
+        Path outputPath = job.getDir().append(attemptID.toQualifiedString(1) + "-output");
         Attempt newAttempt = new Attempt(attemptID, target, outputPath);
         task.addAttempt(newAttempt);
 
