@@ -30,69 +30,71 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     
     @SuppressWarnings("rawtypes")
     private void BuildTree() {
-        JobID[] jobIds;
+        JobID[] jobIds = null;
         try {
             jobIds = services.getJobIDs();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        for(int i=0; i<jobIds.length; i++)
-        {
-            boolean jobfound = false;
-            DefaultMutableTreeNode jobnode = null;
-            for (Enumeration e = root.children(); e.hasMoreElements() ;) {
-                jobnode = (DefaultMutableTreeNode) e.nextElement();
-                int nid = Integer.parseInt(((String)jobnode.getUserObject()).split(" ")[1]);
-                if(jobIds[i].getValue() == nid) {
-                    jobfound = true;
-                    break;
-                }
-            }
-            if(!jobfound)
+        if(jobIds != null) {
+            for(int i=0; i<jobIds.length; i++)
             {
-                jobnode = new DefaultMutableTreeNode("Job " + jobIds[i].getValue());
-                treeModel.insertNodeInto(jobnode, root, root.getChildCount());
-            }
-            
-            try {
-                JobStatus job = services.getJobStatus(jobIds[i]);
+                boolean jobfound = false;
+                DefaultMutableTreeNode jobnode = null;
+                for (Enumeration e = root.children(); e.hasMoreElements() ;) {
+                    jobnode = (DefaultMutableTreeNode) e.nextElement();
+                    int nid = Integer.parseInt(((String)jobnode.getUserObject()).split(" ")[1]);
+                    if(jobIds[i].getValue() == nid) {
+                        jobfound = true;
+                        break;
+                    }
+                }
+                if(!jobfound)
+                {
+                    jobnode = new DefaultMutableTreeNode("Job " + jobIds[i].getValue());
+                    treeModel.insertNodeInto(jobnode, root, root.getChildCount());
+                }
                 
-                for (TaskStatus task : job.getTaskStatuses(Phase.MAP)) {
-                    DefaultMutableTreeNode tasknode = null;
-                    boolean taskfound = false;
-                    for (Enumeration e = jobnode.children(); e.hasMoreElements() ;) {
-                        tasknode = (DefaultMutableTreeNode) e.nextElement();
-                        int tid = Integer.parseInt(((String)tasknode.getUserObject()).split(" ")[1]);
-                        if(task.getId().getValue() == tid) {
-                            taskfound = true;
-                            break;
-                        }
-                    }
-                    if(!taskfound)
-                    {
-                        tasknode = new DefaultMutableTreeNode("Task " + task.getId().getValue());
-                        treeModel.insertNodeInto(tasknode, jobnode, jobnode.getChildCount());
-                    }
+                try {
+                    JobStatus job = services.getJobStatus(jobIds[i]);
                     
-                    for (AttemptStatus attempt : task.getAttemptStatuses()) {
-                        DefaultMutableTreeNode attemptnode = null;
-                        boolean attemptfound = false;
-                        for (Enumeration e = tasknode.children(); e.hasMoreElements() ;) {
-                            attemptnode = (DefaultMutableTreeNode) e.nextElement();
-                            int aid = Integer.parseInt(((String)attemptnode.getUserObject()).split(" ")[1]);
-                            if(attempt.getId().getValue() == aid) {
-                                attemptfound = true;
+                    for (TaskStatus task : job.getTaskStatuses(Phase.MAP)) {
+                        DefaultMutableTreeNode tasknode = null;
+                        boolean taskfound = false;
+                        for (Enumeration e = jobnode.children(); e.hasMoreElements() ;) {
+                            tasknode = (DefaultMutableTreeNode) e.nextElement();
+                            int tid = Integer.parseInt(((String)tasknode.getUserObject()).split(" ")[1]);
+                            if(task.getId().getValue() == tid) {
+                                taskfound = true;
                                 break;
                             }
                         }
-                        if(!attemptfound)
+                        if(!taskfound)
                         {
-                            attemptnode = new DefaultMutableTreeNode("Attempt " + attempt.getId().getValue());
-                            treeModel.insertNodeInto(attemptnode, tasknode, tasknode.getChildCount());
+                            tasknode = new DefaultMutableTreeNode("Task " + task.getId().getValue());
+                            treeModel.insertNodeInto(tasknode, jobnode, jobnode.getChildCount());
+                        }
+                        
+                        for (AttemptStatus attempt : task.getAttemptStatuses()) {
+                            DefaultMutableTreeNode attemptnode = null;
+                            boolean attemptfound = false;
+                            for (Enumeration e = tasknode.children(); e.hasMoreElements() ;) {
+                                attemptnode = (DefaultMutableTreeNode) e.nextElement();
+                                int aid = Integer.parseInt(((String)attemptnode.getUserObject()).split(" ")[1]);
+                                if(attempt.getId().getValue() == aid) {
+                                    attemptfound = true;
+                                    break;
+                                }
+                            }
+                            if(!attemptfound)
+                            {
+                                attemptnode = new DefaultMutableTreeNode("Attempt " + attempt.getId().getValue());
+                                treeModel.insertNodeInto(attemptnode, tasknode, tasknode.getChildCount());
+                            }
                         }
                     }
-                }
-            } catch(IOException e) { }
+                } catch(IOException e) { }
+            }
         }
     }
     
