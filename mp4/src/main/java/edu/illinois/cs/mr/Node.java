@@ -87,6 +87,7 @@ public class Node {
     public interface NodeServices extends JobManagerService, FileSystemService, TaskExecutorService,
         LoadBalancerService {
         public void stopNode();
+        public NodeID getNodeID();
     }
 
     private final NodeConfiguration config;
@@ -209,6 +210,11 @@ public class Node {
         @Override
         public void stopNode() {
             Node.this.stop();
+        }
+        
+        @Override
+        public NodeID getNodeID() {
+            return Node.this.getID();
         }
 
         @Override

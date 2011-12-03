@@ -157,7 +157,6 @@ public class LoadBalancer implements LoadBalancerService {
                     nodeStatus.setActivateThreadCount(taskExecutor.getNumActiveThreads());
                     snapshot = nodeStatus.toImmutableStatus();
                 }
-                System.out.println(snapshot);
 
                 for (NodeID nodeID : node.getNodeIds()) {
                     LoadBalancerService loadBalancer = node.getLoadBalancerService(nodeID);
