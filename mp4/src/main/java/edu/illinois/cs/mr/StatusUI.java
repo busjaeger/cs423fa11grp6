@@ -1,20 +1,31 @@
 package edu.illinois.cs.mr;
 
-import javax.swing.*;
-import java.awt.event.*;
-import javax.imageio.ImageIO;
+import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Enumeration;
 
-import javax.swing.tree.*;
-import javax.swing.event.*;
+import javax.imageio.ImageIO;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTree;
+import javax.swing.Timer;
+import javax.swing.event.TreeSelectionEvent;
+import javax.swing.event.TreeSelectionListener;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
 
 import edu.illinois.cs.mr.Node.NodeServices;
+import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.jm.Phase;
-import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.RPC;
 
@@ -209,7 +220,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         this.setResizable(false);
         
         try {
-            BufferedImage icon = ImageIO.read(this.getClass().getResource("/src/main/resources/icon.png"));
+            BufferedImage icon = ImageIO.read(this.getClass().getResource("icon.png"));
             this.setIconImage(icon);
         } catch (Exception e) { }
     }
