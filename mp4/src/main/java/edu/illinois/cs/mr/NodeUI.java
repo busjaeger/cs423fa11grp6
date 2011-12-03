@@ -43,7 +43,7 @@ import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
 
-public class StatusUI extends JFrame implements TreeSelectionListener {
+public class NodeUI extends JFrame implements TreeSelectionListener {
 
     private static final long serialVersionUID = 6732880434775381175L;
     
@@ -336,12 +336,12 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                 System.exit(2);
             } 
         
-        StatusUI frame = new StatusUI();
+        NodeUI frame = new NodeUI();
         
         frame.setVisible(true);
     }
 
-    public StatusUI() {
+    public NodeUI() {
         fJar = null;
         fInput = null;
         SetupFrame();

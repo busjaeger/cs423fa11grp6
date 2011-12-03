@@ -1,1 +1,1 @@
-java -cp ../target/mp4-1.0-SNAPSHOT.jar edu.illinois.cs.mr.StatusUI $*
+java -cp ../target/mp4-1.0-SNAPSHOT.jar edu.illinois.cs.mr.NodeUI $*
