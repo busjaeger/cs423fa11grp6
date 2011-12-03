@@ -1,19 +1,32 @@
 package edu.illinois.cs.mr;
 
+import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.util.Enumeration;
 
 import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.Timer;
+import javax.swing.border.Border;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -40,7 +53,10 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     private DefaultMutableTreeNode root;
     private int nodeId;
     private DefaultTreeModel treeModel;
+    private JTextField tfInput, tfJar;
     static NodeServices services;
+    private double throttleValue;
+    private File fJar, fInput;
     
     @SuppressWarnings("rawtypes")
     private void BuildTree() {
@@ -288,6 +304,14 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                                 return;
                             }
                         }
+                        // If we got here, the task wasn't found so it must have been deleted
+                        labelState.setText("State: \tDeleted");
+                        labelState.setVisible(true);
+                        labelDetail.setVisible(false);
+                        labelMessage.setVisible(false);
+                        labelTotal.setVisible(false);
+                        labelWaiting.setVisible(false);
+                        labelRunning.setVisible(false);
                     }    
                 }
             }
@@ -297,18 +321,18 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     public static void main(String[] args) {
         String host;
         int port;
-        if (args.length > 2 && args[1].equals("-n")) {
-            String[] target = args[2].split(":");
+        if (args.length > 1 && args[0].equals("-n")) {
+            String[] target = args[1].split(":");
             host = target[0];
-            port = Integer.parseInt(target[1]);
+            port = Integer.parseInt(target[1].trim());
         } else {
             host = "localhost";
             port = 60001;
         }
         try {
             services = RPC.newClient(host, port, NodeServices.class);
-            } catch(IOException ioe) {
-                System.out.println("Error connecting to node.\n");
+            } catch(Exception e) {
+                System.out.println("Error connecting to node " + host + ":" + port + ".\n");
                 System.exit(2);
             } 
         
@@ -318,6 +342,8 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     }
 
     public StatusUI() {
+        fJar = null;
+        fInput = null;
         SetupFrame();
         SetupGUIElements();
         BuildTree();
@@ -353,12 +379,12 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     private void SetupGUIElements() {
         JPanel pane = new JPanel(null);
         
-        treeLabel = new JLabel("Jobs Created on this Node:");
+        nodeId = services.getNodeID().getValue();
+        
+        treeLabel = new JLabel("Jobs Created on Node" + nodeId + ":");
         treeLabel.setLocation(12, 10);
         treeLabel.setSize(300,20);
         pane.add(treeLabel);
-        
-        nodeId = services.getNodeID().getValue();
         
         root = new DefaultMutableTreeNode("Node "+nodeId);
         treeModel = new DefaultTreeModel(root);
@@ -414,6 +440,171 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         labelRunning.setLocation(350, 280);
         labelRunning.setVisible(false);
         pane.add(labelRunning);
+        
+        JPanel panelNode = new JPanel(null);
+        Border etched = BorderFactory.createEtchedBorder();
+        Border titled = BorderFactory.createTitledBorder(etched, "Node " + nodeId + " Options");
+        panelNode.setBorder(titled);
+        panelNode.setSize(420, 240);
+        panelNode.setLocation(350, 320);
+        
+        JPanel panelThrottle = new JPanel(new BorderLayout());
+        Border etched2 = BorderFactory.createEtchedBorder();
+        Border titled2 = BorderFactory.createTitledBorder(etched2, "Throttle");
+        panelThrottle.setBorder(titled2);
+        panelThrottle.setSize(150, 100);
+        panelThrottle.setLocation(10, 20);
+        throttleValue = 0;
+        
+        JSlider slideThrottle = new JSlider();
+        slideThrottle.setValue((int)throttleValue);
+        slideThrottle.setMajorTickSpacing(20);
+        slideThrottle.setMinorTickSpacing(10);
+        slideThrottle.setMinimum(0);
+        slideThrottle.setMaximum(100);
+        slideThrottle.setPaintTicks(true);
+        slideThrottle.setPaintLabels(true);
+        slideThrottle.addChangeListener(new ChangeListener() {
+            public void stateChanged (ChangeEvent event)
+            {
+                throttleValue = (double)((JSlider)event.getSource()).getValue();
+            }
+        });
+        slideThrottle.setVisible(true);
+        panelThrottle.add(slideThrottle, BorderLayout.NORTH);
+        
+        JButton bThrottle = new JButton("Set");
+        bThrottle.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    services.setThrottle(throttleValue);
+                } catch(IOException ioe) { }
+            }
+          });
+        bThrottle.setVisible(true);
+        panelThrottle.add(bThrottle, BorderLayout.SOUTH);
+        
+        panelThrottle.setVisible(true);
+        panelNode.add(panelThrottle);
+        
+        JPanel panelSubmit = new JPanel(null);
+        Border etched3 = BorderFactory.createEtchedBorder();
+        Border titled3 = BorderFactory.createTitledBorder(etched3, "Submit Job");
+        panelSubmit.setBorder(titled3);
+        panelSubmit.setSize(240, 210);
+        panelSubmit.setLocation(170, 20);
+                
+                JLabel labelJar = new JLabel("Job Jar:");
+                labelJar.setSize(150,20);
+                labelJar.setLocation(10,20);
+                labelJar.setVisible(true);
+                panelSubmit.add(labelJar);
+                
+                tfJar = new JTextField();
+                tfJar.setEditable(false);
+                tfJar.setSize(180,25);
+                tfJar.setLocation(10,50);
+                tfJar.setVisible(true);
+                panelSubmit.add(tfJar);
+                
+                JButton bJar = new JButton("...");
+        bJar.setSize(35, 25);
+        bJar.setLocation(195, 50);
+        bJar.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                                final JFileChooser fc = new JFileChooser();
+                                int returnVal = fc.showOpenDialog((Component) e.getSource());
+                                if (returnVal == JFileChooser.APPROVE_OPTION) {
+                                        fJar = fc.getSelectedFile();
+                                        tfJar.setText(fJar.getName());
+                                }
+                        }
+                });
+        bJar.setVisible(true);
+        panelSubmit.add(bJar);
+                
+                JLabel labelInput = new JLabel("Input File:");
+                labelInput.setSize(150,20);
+                labelInput.setLocation(10,85);
+                labelInput.setVisible(true);
+                panelSubmit.add(labelInput);
+                
+                tfInput = new JTextField();
+                tfInput.setEditable(false);
+                tfInput.setSize(180,25);
+                tfInput.setLocation(10,115);
+                tfInput.setVisible(true);
+                panelSubmit.add(tfInput);
+                
+                JButton bInput = new JButton("...");
+        bInput.setSize(35, 25);
+        bInput.setLocation(195, 115);
+        bInput.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                final JFileChooser fc = new JFileChooser();
+                int returnVal = fc.showOpenDialog((Component) e.getSource());
+                if (returnVal == JFileChooser.APPROVE_OPTION) {
+                    fInput = fc.getSelectedFile();
+                    tfInput.setText(fInput.getName());
+                }
+            }
+        });
+        bInput.setVisible(true);
+        panelSubmit.add(bInput);
+                
+        JButton bSubmit = new JButton("Submit");
+        bSubmit.setSize(140, 30);
+        bSubmit.setLocation(50, 170);
+        bSubmit.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if(fJar == null || fInput == null) {
+                    JOptionPane.showMessageDialog((Component) e.getSource(), 
+                                  "Invalid Jar and/or Input file(s).", "Error",
+                                  JOptionPane.ERROR_MESSAGE);
+                }
+                else {
+                    try {    
+                        JobID id = services.submitJob(fJar, fInput);
+                        JOptionPane.showMessageDialog((Component) e.getSource(), 
+                                      "Job " + id.getValue() + " submitted.",
+                                      "Job Submitted", JOptionPane.INFORMATION_MESSAGE);
+                        fJar= null;
+                        fInput = null;
+                        tfJar.setText("");
+                        tfInput.setText("");
+                    }
+                    catch(IOException ioe) {
+                        JOptionPane.showMessageDialog((Component) e.getSource(), "Error submitting job.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+        bSubmit.setVisible(true);
+        panelSubmit.add(bSubmit);
+                
+                panelSubmit.setVisible(true);
+                panelNode.add(panelSubmit);
+        
+        JButton bStop = new JButton("Stop Node");
+        bStop.setSize(140, 30);
+        bStop.setLocation(14, 160);
+        bStop.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+              int option = JOptionPane.showConfirmDialog((Component) e.getSource(),
+                             "Stop node and exit GUI?", "Stop and Exit?", 
+                             JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+              if(option == JOptionPane.YES_OPTION) {
+                  services.stopNode();
+                  System.exit(0);
+              }
+            }
+          });
+        bStop.setVisible(true);
+        panelNode.add(bStop);
+        
+        
+        panelNode.setVisible(true);
+        pane.add(panelNode);
         
         this.add(pane);
     }
