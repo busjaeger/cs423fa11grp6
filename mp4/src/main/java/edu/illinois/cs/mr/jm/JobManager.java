@@ -70,7 +70,7 @@ public class JobManager implements JobManagerService {
      */
     public JobID[] getJobIDs() {
         synchronized (jobs) {
-            return (JobID[])jobs.keySet().toArray();
+            return jobs.keySet().toArray(new JobID[0]);
         }
     }
 
