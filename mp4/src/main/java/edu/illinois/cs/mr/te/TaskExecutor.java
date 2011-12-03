@@ -128,7 +128,10 @@ public class TaskExecutor implements TaskExecutorService {
     	taskRuntimes[index] = runtime;
     	int temp = (index++) % capacity;
     	this.index = temp;
-    	this.updateAverage();    	
+    	this.updateAverage();
+    	if(this.throttle == 0) {
+    		return 0;
+    	}
     	return (this.averageRuntime / ((long)this.throttle / 100)) - this.averageRuntime;    	
     }
     
