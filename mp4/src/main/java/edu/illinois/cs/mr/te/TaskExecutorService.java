@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import edu.illinois.cs.mr.Node.NodeService;
 import edu.illinois.cs.mr.jm.AttemptID;
 
 
@@ -13,7 +12,7 @@ import edu.illinois.cs.mr.jm.AttemptID;
  * 
  * @author benjamin
  */
-public interface TaskExecutorService extends NodeService {
+public interface TaskExecutorService {
 
     /**
      * Execute the given task attempt through this executor service

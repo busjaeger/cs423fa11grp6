@@ -16,13 +16,14 @@ import edu.illinois.cs.mapreduce.spi.TransferPolicy;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.NodeID;
+import edu.illinois.cs.mr.NodeListener;
 import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.JobManager;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.te.TaskExecutor;
 import edu.illinois.cs.mr.util.CpuProfiler;
 
-public class LoadBalancer implements LoadBalancerService {
+public class LoadBalancer implements LoadBalancerService, NodeListener {
 
     private final NodeConfiguration config;
 

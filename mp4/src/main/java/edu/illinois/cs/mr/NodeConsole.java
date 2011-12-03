@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 
-import edu.illinois.cs.mr.Node.NodeServices;
 import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.jm.Phase;
@@ -66,7 +65,7 @@ public class NodeConsole {
 
         String[] params = new String[args.length - paramIdx];
         System.arraycopy(args, paramIdx, params, 0, params.length);
-        NodeServices services = RPC.newClient(host, port, NodeServices.class);
+        NodeService services = RPC.newClient(host, port, NodeService.class);
         switch (cmd) {
             case HELP:
                 printUsage();
@@ -123,7 +122,7 @@ public class NodeConsole {
                 System.out.println("Throttle value set " + newThrottleValue);
                 break;
             case STOP_NODE:
-                services.stopNode();
+                services.stop();
         }
     }
 

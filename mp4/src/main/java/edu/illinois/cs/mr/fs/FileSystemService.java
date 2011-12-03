@@ -3,8 +3,6 @@ package edu.illinois.cs.mr.fs;
 import java.io.IOException;
 import java.io.InputStream;
 
-import edu.illinois.cs.mr.Node.NodeService;
-
 /**
  * Interface to either a local or remote file system. This interface provides an
  * input/output stream abstraction to file system users regardless of underlying
@@ -12,7 +10,7 @@ import edu.illinois.cs.mr.Node.NodeService;
  * 
  * @author benjamin
  */
-public interface FileSystemService extends NodeService {
+public interface FileSystemService {
 
     /**
      * Returns an InputStream to read data from the file located at the given

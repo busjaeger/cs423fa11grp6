@@ -18,13 +18,12 @@ import java.util.concurrent.ExecutorService;
 
 public class RPC {
 
-    public static RPCServer newServer(ExecutorService executorService, int port, Class<?> serverInterface, Object server)
-        throws IOException {
+    public static RPCServer newServer(ExecutorService executorService, int port, Class<?> serverInterface, Object server) {
         return new RPCServer(executorService, port, serverInterface, server);
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> T newClient(String host, int port, Class<T> interf) throws IOException {
+    public static <T> T newClient(String host, int port, Class<T> interf) {
         InvocationHandler handler = new RPCClient(host, port);
         return (T)Proxy.newProxyInstance(RPCClient.class.getClassLoader(), new Class<?>[] {interf}, handler);
     }
@@ -35,20 +34,22 @@ public class RPC {
     public static class RPCServer implements Runnable {
 
         private final ExecutorService executorService;
-        private final ServerSocket serverSocket;
         private final Class<?> serverInterface;
         private final Object server;
+        private final int port;
+
+        private ServerSocket serverSocket;
         private volatile boolean stopped;
 
-        private RPCServer(ExecutorService executorService, int port, Class<?> serverInterface, Object server)
-            throws IOException {
+        private RPCServer(ExecutorService executorService, int port, Class<?> serverInterface, Object server) {
             this.executorService = executorService;
-            this.serverSocket = new ServerSocket(port);
+            this.port = port;
             this.serverInterface = serverInterface;
             this.server = server;
         }
 
-        public void start() {
+        public void start() throws IOException {
+            this.serverSocket = new ServerSocket(port);
             executorService.submit(this);
         }
 

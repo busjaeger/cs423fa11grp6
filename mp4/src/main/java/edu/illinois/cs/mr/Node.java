@@ -34,13 +34,21 @@ import edu.illinois.cs.mr.util.RPC;
 import edu.illinois.cs.mr.util.RPC.RPCServer;
 
 /**
- * The node encapsulates the runtime bootstrap and the remote method invocation
- * implementation.
+ * A node represents a configured runtime instance. It is uniquely identified by
+ * a numerical ID and listens on its own network port.
  * 
  * @author benjamin
  */
-public class Node {
+public class Node implements NodeService {
 
+    /**
+     * Main method to start a new node. If no configuration file is specified,
+     * the default is used.
+     * 
+     * @param args empty or one argument specifying the configuration file
+     * @throws IOException if an error occurred reading the configuration or
+     *             starting the Node
+     */
     public static void main(String[] args) throws IOException {
         String configPath = null;
         if (args.length == 1) {
@@ -62,6 +70,16 @@ public class Node {
         return instance;
     }
 
+    /**
+     * Creates a new (stopped) node for the given configuration. The services
+     * offered by this node are hard-coded here, i.e. there is no dynamic
+     * registration facility. This method also creates the RPC client stubs for
+     * all remote nodes listed in the node configuration.
+     * 
+     * @param cfg path to configuration file
+     * @return created node
+     * @throws IOException if an IOException occurs loading the configuration
+     */
     private static Node createNode(String cfg) throws IOException {
         NodeConfiguration config = (cfg == null) ? NodeConfiguration.load() : NodeConfiguration.load(new File(cfg));
         FileSystem fileSystem = new FileSystem(config);
@@ -69,25 +87,14 @@ public class Node {
         JobManager jobManager = new JobManager(config);
         LoadBalancer loadBalancer = new LoadBalancer(config);
 
-        Map<NodeID, NodeServices> nodeMap = new HashMap<NodeID, NodeServices>();
+        Map<NodeID, NodeService> nodeMap = new HashMap<NodeID, NodeService>();
         for (Entry<NodeID, Endpoint> node : config.nodeMap.entrySet()) {
             NodeID nodeId = node.getKey();
             Endpoint endpoint = node.getValue();
-            nodeMap.put(nodeId, RPC.newClient(endpoint.host, endpoint.port, NodeServices.class));
+            nodeMap.put(nodeId, RPC.newClient(endpoint.host, endpoint.port, NodeService.class));
         }
+
         return new Node(config, loadBalancer, jobManager, taskExecutor, fileSystem, nodeMap);
-    }
-
-    public interface NodeService {
-        void start(Node node);
-
-        void stop();
-    }
-
-    public interface NodeServices extends JobManagerService, FileSystemService, TaskExecutorService,
-        LoadBalancerService {
-        public void stopNode();
-        public NodeID getNodeID();
     }
 
     private final NodeConfiguration config;
@@ -97,18 +104,17 @@ public class Node {
     private final FileSystem fileSystem;
     private final ExecutorService executorService;
     private final List<NodeID> nodeIds;
-    private final Map<NodeID, NodeServices> nodeMap;
-    private final NodeServices services;
+    private final Map<NodeID, NodeService> nodeMap;
+    private final RPCServer server;
 
     private boolean started;
-    private RPCServer server;
 
     public Node(NodeConfiguration config,
                 LoadBalancer loadBalancer,
                 JobManager jobManager,
                 TaskExecutor taskExecutor,
                 FileSystem fileSystem,
-                Map<NodeID, NodeServices> nodeMap) {
+                Map<NodeID, NodeService> nodeMap) {
         this.config = config;
         this.loadBalancer = loadBalancer;
         this.jobManager = jobManager;
@@ -119,7 +125,7 @@ public class Node {
         ids.add(config.nodeId);
         this.nodeIds = Collections.unmodifiableList(ids);
         this.executorService = Executors.newCachedThreadPool();
-        this.services = new NodeServicesImpl();
+        this.server = RPC.newServer(executorService, config.port, NodeService.class, this);
     }
 
     public synchronized void start() throws IOException {
@@ -127,10 +133,12 @@ public class Node {
             return;
 
         // start server
-        server = RPC.newServer(executorService, config.port, NodeServices.class, services);
         server.start();
+
         // start services
-        services.start(this);
+        taskExecutor.start(this);
+        jobManager.start(this);
+        loadBalancer.start(this);
 
         System.out.println("node " + config.nodeId + " started");
         started = true;
@@ -143,9 +151,12 @@ public class Node {
         System.out.println("node " + config.nodeId + " stopped");
     }
 
+    @Override
     public synchronized void stop() {
         if (started) {
-            services.stop();
+            loadBalancer.stop();
+            jobManager.stop();
+            taskExecutor.stop();
             server.stop();
             executorService.shutdown();
             started = false;
@@ -153,7 +164,7 @@ public class Node {
         }
     }
 
-    public NodeID getID() {
+    public NodeID getId() {
         return config.nodeId;
     }
 
@@ -205,108 +216,81 @@ public class Node {
         return nodeMap.get(nodeId);
     }
 
-    class NodeServicesImpl implements NodeServices {
+    // delegation methods
 
-        @Override
-        public void stopNode() {
-            Node.this.stop();
-        }
-        
-        @Override
-        public NodeID getNodeID() {
-            return Node.this.getID();
-        }
-
-        @Override
-        public void start(Node node) {
-            fileSystem.start(node);
-            taskExecutor.start(node);
-            jobManager.start(node);
-            loadBalancer.start(node);
-        }
-
-        @Override
-        public void stop() {
-            loadBalancer.stop();
-            jobManager.stop();
-            taskExecutor.stop();
-            fileSystem.stop();
-        }
-
-        @Override
-        public JobID submitJob(File jarFile, File inputFile) throws IOException {
-            return jobManager.submitJob(jarFile, inputFile);
-        }
-
-        @Override
-        public JobStatus getJobStatus(JobID jobID) throws IOException {
-            return jobManager.getJobStatus(jobID);
-        }
-
-        @Override
-        public JobID[] getJobIDs() {
-            return jobManager.getJobIDs();
-        }
-
-        @Override
-        public boolean updateStatus(AttemptStatus[] statuses) throws IOException {
-            return jobManager.updateStatus(statuses);
-        }
-
-        @Override
-        public boolean writeOutput(JobID jobID, File file) throws IOException {
-            return jobManager.writeOutput(jobID, file);
-        }
-
-        @Override
-        public InputStream read(Path path) throws IOException {
-            return fileSystem.read(path);
-        }
-
-        @Override
-        public void write(Path dest, InputStream is) throws IOException {
-            fileSystem.write(dest, is);
-        }
-
-        @Override
-        public boolean mkdir(Path path) throws IOException {
-            return fileSystem.mkdir(path);
-        }
-
-        @Override
-        public boolean delete(Path path) throws IOException {
-            return fileSystem.delete(path);
-        }
-
-        @Override
-        public boolean exists(Path path) throws IOException {
-            return fileSystem.exists(path);
-        }
-
-        @Override
-        public void execute(TaskExecutorTask task) throws IOException {
-            taskExecutor.execute(task);
-        }
-
-        @Override
-        public boolean cancel(AttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
-            return taskExecutor.cancel(id, timeout, unit);
-        }
-
-        @Override
-        public boolean delete(AttemptID id) throws IOException {
-            return taskExecutor.delete(id);
-        }
-
-        @Override
-        public void setThrottle(double value) throws IOException {
-            taskExecutor.setThrottle(value);
-        }
-
-        @Override
-        public boolean updateStatus(NodeStatusSnapshot nodeStatus) throws IOException {
-            return loadBalancer.updateStatus(nodeStatus);
-        }
-
+    @Override
+    public JobID submitJob(File jarFile, File inputFile) throws IOException {
+        return jobManager.submitJob(jarFile, inputFile);
     }
+
+    @Override
+    public JobStatus getJobStatus(JobID jobID) throws IOException {
+        return jobManager.getJobStatus(jobID);
+    }
+
+    @Override
+    public JobID[] getJobIDs() {
+        return jobManager.getJobIDs();
+    }
+
+    @Override
+    public boolean updateStatus(AttemptStatus[] statuses) throws IOException {
+        return jobManager.updateStatus(statuses);
+    }
+
+    @Override
+    public boolean writeOutput(JobID jobID, File file) throws IOException {
+        return jobManager.writeOutput(jobID, file);
+    }
+
+    @Override
+    public InputStream read(Path path) throws IOException {
+        return fileSystem.read(path);
+    }
+
+    @Override
+    public void write(Path dest, InputStream is) throws IOException {
+        fileSystem.write(dest, is);
+    }
+
+    @Override
+    public boolean mkdir(Path path) throws IOException {
+        return fileSystem.mkdir(path);
+    }
+
+    @Override
+    public boolean delete(Path path) throws IOException {
+        return fileSystem.delete(path);
+    }
+
+    @Override
+    public boolean exists(Path path) throws IOException {
+        return fileSystem.exists(path);
+    }
+
+    @Override
+    public void execute(TaskExecutorTask task) throws IOException {
+        taskExecutor.execute(task);
+    }
+
+    @Override
+    public boolean cancel(AttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
+        return taskExecutor.cancel(id, timeout, unit);
+    }
+
+    @Override
+    public boolean delete(AttemptID id) throws IOException {
+        return taskExecutor.delete(id);
+    }
+
+    @Override
+    public void setThrottle(double value) throws IOException {
+        taskExecutor.setThrottle(value);
+    }
+
+    @Override
+    public boolean updateStatus(NodeStatusSnapshot nodeStatus) throws IOException {
+        return loadBalancer.updateStatus(nodeStatus);
+    }
+
 }

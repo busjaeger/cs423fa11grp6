@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 
-import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.util.FileUtil;
 
@@ -24,16 +23,6 @@ public class FileSystem implements FileSystemService {
     public FileSystem(NodeConfiguration config) throws IOException {
         this.dir = config.fsRootDir;
         FileUtil.ensureDirExists(dir);
-    }
-
-    @Override
-    public void start(Node node) {
-        // nothing to do
-    }
-
-    @Override
-    public void stop() {
-        // nothing to do
     }
 
     @Override

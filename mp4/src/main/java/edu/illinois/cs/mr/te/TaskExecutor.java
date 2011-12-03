@@ -20,14 +20,15 @@ import java.util.concurrent.TimeoutException;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.NodeID;
+import edu.illinois.cs.mr.NodeListener;
 import edu.illinois.cs.mr.fs.FileSystemService;
 import edu.illinois.cs.mr.fs.Path;
-import edu.illinois.cs.mr.jm.JobManagerService;
 import edu.illinois.cs.mr.jm.AttemptID;
 import edu.illinois.cs.mr.jm.AttemptStatus;
+import edu.illinois.cs.mr.jm.JobManagerService;
 import edu.illinois.cs.mr.util.Status.State;
 
-public class TaskExecutor implements TaskExecutorService {
+public class TaskExecutor implements TaskExecutorService, NodeListener {
 
     private static class TaskExecution {
         private final Future<?> future;

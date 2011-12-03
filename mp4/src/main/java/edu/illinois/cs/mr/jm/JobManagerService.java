@@ -3,14 +3,12 @@ package edu.illinois.cs.mr.jm;
 import java.io.File;
 import java.io.IOException;
 
-import edu.illinois.cs.mr.Node.NodeService;
-
 /**
  * A JobManagerService manages the execution of jobs.
  * 
  * @author benjamin
  */
-public interface JobManagerService extends NodeService {
+public interface JobManagerService {
 
     /**
      * Creates and schedules a job for the given job executable and input file.

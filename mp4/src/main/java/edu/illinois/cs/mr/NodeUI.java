@@ -34,7 +34,6 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
-import edu.illinois.cs.mr.Node.NodeServices;
 import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
@@ -54,7 +53,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
     private int nodeId;
     private DefaultTreeModel treeModel;
     private JTextField tfInput, tfJar;
-    static NodeServices services;
+    static NodeService services;
     private double throttleValue;
     private File fJar, fInput;
     
@@ -330,7 +329,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
             port = 60001;
         }
         try {
-            services = RPC.newClient(host, port, NodeServices.class);
+            services = RPC.newClient(host, port, NodeService.class);
             } catch(Exception e) {
                 System.out.println("Error connecting to node " + host + ":" + port + ".\n");
                 System.exit(2);
@@ -379,7 +378,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
     private void SetupGUIElements() {
         JPanel pane = new JPanel(null);
         
-        nodeId = services.getNodeID().getValue();
+        nodeId = services.getId().getValue();
         
         treeLabel = new JLabel("Jobs Created on Node" + nodeId + ":");
         treeLabel.setLocation(12, 10);
@@ -594,7 +593,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                              "Stop node and exit GUI?", "Stop and Exit?", 
                              JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
               if(option == JOptionPane.YES_OPTION) {
-                  services.stopNode();
+                  services.stop();
                   System.exit(0);
               }
             }

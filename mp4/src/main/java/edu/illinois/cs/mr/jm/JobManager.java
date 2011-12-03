@@ -26,6 +26,7 @@ import edu.illinois.cs.mapreduce.api.Splitter;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.NodeID;
+import edu.illinois.cs.mr.NodeListener;
 import edu.illinois.cs.mr.fs.FileSystemService;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.fs.QualifiedPath;
@@ -40,7 +41,7 @@ import edu.illinois.cs.mr.util.Status.State;
  * the TaskExecutors in the cluster. It derives job status from periodic status
  * updates from the TaskExecutors.
  */
-public class JobManager implements JobManagerService {
+public class JobManager implements JobManagerService, NodeListener {
 
     private final NodeConfiguration config;
     private final AtomicInteger counter;
