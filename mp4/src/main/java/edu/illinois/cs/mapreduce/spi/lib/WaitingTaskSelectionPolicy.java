@@ -1,6 +1,8 @@
 package edu.illinois.cs.mapreduce.spi.lib;
 
+import static edu.illinois.cs.mr.util.Status.State.CANCELED;
 import static edu.illinois.cs.mr.util.Status.State.CREATED;
+import static edu.illinois.cs.mr.util.Status.State.FAILED;
 import static edu.illinois.cs.mr.util.Status.State.WAITING;
 
 import java.util.LinkedList;
@@ -19,18 +21,19 @@ public class WaitingTaskSelectionPolicy implements SelectionPolicy {
     public AttemptStatus selectAttempt(NodeID source, NodeID target, Iterable<JobStatus> jobs) {
         for (JobStatus job : reverse(jobs)) {
             // we currently do not swap reducers
-            taskLoop : for (TaskStatus task : reverse(job.getTaskStatuses(Phase.MAP))) {
+            taskLoop: for (TaskStatus task : reverse(job.getTaskStatuses(Phase.MAP))) {
                 AttemptStatus candidate = null;
                 for (AttemptStatus attempt : reverse(task.getAttemptStatuses())) {
                     NodeID runningOn = attempt.getTargetNodeID();
-                    // if this task has a running attempt on that node, don't select it
-                    if (runningOn.equals(target) && !attempt.isDone())
+                    State state = attempt.getState();
+                    // if this task has a running/succeeded attempts on target
+                    // node, don't select it
+                    if (runningOn.equals(target) && state != FAILED && state != CANCELED)
                         continue taskLoop;
 
                     // we found an attempt that's running on the source
-                    State state = attempt.getState();
                     if (candidate == null && runningOn.equals(source) && state == CREATED || state == WAITING)
-                            candidate = attempt;
+                        candidate = attempt;
                 }
                 if (candidate != null)
                     return candidate;
