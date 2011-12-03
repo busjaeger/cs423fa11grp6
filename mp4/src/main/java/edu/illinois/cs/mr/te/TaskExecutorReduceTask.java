@@ -6,7 +6,7 @@ import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.fs.QualifiedPath;
 import edu.illinois.cs.mr.jm.JobDescriptor;
-import edu.illinois.cs.mr.jm.TaskAttemptID;
+import edu.illinois.cs.mr.jm.AttemptID;
 
 public class TaskExecutorReduceTask extends TaskExecutorTask {
 
@@ -14,7 +14,7 @@ public class TaskExecutorReduceTask extends TaskExecutorTask {
 
     private final List<QualifiedPath> inputPaths;
 
-    public TaskExecutorReduceTask(TaskAttemptID id,
+    public TaskExecutorReduceTask(AttemptID id,
                                   Path jarPath,
                                   JobDescriptor descriptor,
                                   Path outputPath,

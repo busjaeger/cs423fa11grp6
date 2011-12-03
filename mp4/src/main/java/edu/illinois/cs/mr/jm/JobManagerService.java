@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 
 import edu.illinois.cs.mr.Node.NodeService;
-import edu.illinois.cs.mr.te.TaskExecutorStatus;
 
 /**
  * A JobManagerService manages the execution of jobs.
@@ -23,17 +22,17 @@ public interface JobManagerService extends NodeService {
      */
     JobID submitJob(File jarFile, File inputFile) throws IOException;
 
-    JobID[] getJobIDs();
+    JobID[] getJobIDs() throws IOException;
     
     JobStatus getJobStatus(JobID jobID) throws IOException;
 
     /**
      * 
      * @param status
-     * @param statuses  must be sorted by {@link TaskAttemptID}
+     * @param statuses  must be sorted by {@link AttemptID}
      * @return
      * @throws IOException
      */
-    boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] statuses) throws IOException;
+    boolean updateStatus(AttemptStatus[] statuses) throws IOException;
 
 }

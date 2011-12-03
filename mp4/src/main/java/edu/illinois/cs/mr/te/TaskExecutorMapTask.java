@@ -4,7 +4,7 @@ import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.jm.JobDescriptor;
-import edu.illinois.cs.mr.jm.TaskAttemptID;
+import edu.illinois.cs.mr.jm.AttemptID;
 
 public class TaskExecutorMapTask extends TaskExecutorTask {
 
@@ -13,7 +13,7 @@ public class TaskExecutorMapTask extends TaskExecutorTask {
     private final Partition partition;
     private final Path inputPath;
 
-    public TaskExecutorMapTask(TaskAttemptID id,
+    public TaskExecutorMapTask(AttemptID id,
                                Path jarPath,
                                JobDescriptor descriptor,
                                Path outputPath,

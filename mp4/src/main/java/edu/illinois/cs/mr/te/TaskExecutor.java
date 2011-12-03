@@ -23,8 +23,8 @@ import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.fs.FileSystemService;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.jm.JobManagerService;
-import edu.illinois.cs.mr.jm.TaskAttemptID;
-import edu.illinois.cs.mr.jm.TaskAttemptStatus;
+import edu.illinois.cs.mr.jm.AttemptID;
+import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.util.Status.State;
 
 public class TaskExecutor implements TaskExecutorService {
@@ -55,32 +55,28 @@ public class TaskExecutor implements TaskExecutorService {
 
     private final NodeConfiguration config;
     private final ThreadPoolExecutor executorService;
-    private final int cpuProfilingInterval;
+    private final int numThreads;
     private final int statusUpdateInterval;
     private final Timer timer;
     private Node node; // quasi immutable
 
     // mutable state
-    private final Map<TaskAttemptID, TaskExecution> executions;
+    private final Map<AttemptID, TaskExecution> executions;
     private double throttle;
-    private double cpuUtilization;
-    private double throttleInterval;
 
     public TaskExecutor(NodeConfiguration config) {
         this.config = config;
-        this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
-        this.executions = new TreeMap<TaskAttemptID, TaskExecution>();
+        this.numThreads = config.teNumThreads;
         this.throttle = config.teThrottle;
-        this.cpuProfilingInterval = config.teCpuProfilingInterval;
         this.statusUpdateInterval = config.teStatusUpdateInterval;
-        this.throttleInterval = config.teThrottleInterval;
+        this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
+        this.executions = new TreeMap<AttemptID, TaskExecution>();
         this.timer = new Timer();
     }
 
     @Override
     public void start(Node node) {
         this.node = node;
-        this.timer.schedule(new HardwareMonitorTask(this), 0, this.cpuProfilingInterval);
         this.timer.schedule(new StatusUpdateTask(), 0, this.statusUpdateInterval);
     }
 
@@ -91,24 +87,30 @@ public class TaskExecutor implements TaskExecutorService {
     }
 
     @Override
-    public synchronized void setThrottle(double value) throws IOException {
+    public synchronized void setThrottle(double value) {
         this.throttle = value;
     }
 
-    public synchronized void setCpuUtilization(double cpuUtilization) {
-        this.cpuUtilization = cpuUtilization;
+    public synchronized double getThrottle() {
+        return this.throttle;
     }
 
-    private int computeSleepForInterval() {
-        double interval = ((100.0 - this.throttle) / 100.0) * this.throttleInterval;
-        return (int)interval;
+    public int getNumThreads() {
+        return this.numThreads;
+    }
+
+    public int getNumActiveThreads() {
+        return executorService.getActiveCount();
+    }
+
+    public int getQueueLength() {
+        return executorService.getQueue().size();
     }
 
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
-        int sleepFor = this.computeSleepForInterval();
         Semaphore completion = new Semaphore(0);
-        TaskRunner runner = new TaskRunner(sleepFor, task, completion, node);
+        TaskRunner runner = new TaskRunner(task, completion, node);
         synchronized (executions) {
             task.setState(State.WAITING);
             Future<?> future = executorService.submit(runner);
@@ -117,7 +119,7 @@ public class TaskExecutor implements TaskExecutorService {
     }
 
     @Override
-    public boolean cancel(TaskAttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
+    public boolean cancel(AttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
         TaskExecution execution;
         synchronized (executions) {
             execution = executions.get(id);
@@ -144,7 +146,7 @@ public class TaskExecutor implements TaskExecutorService {
     }
 
     @Override
-    public boolean delete(TaskAttemptID id) throws IOException {
+    public boolean delete(AttemptID id) throws IOException {
         TaskExecution execution;
         synchronized (executions) {
             execution = executions.get(id);
@@ -170,31 +172,24 @@ public class TaskExecutor implements TaskExecutorService {
         @Override
         public void run() {
             try {
-                Map<NodeID, List<TaskAttemptStatus>> map = new TreeMap<NodeID, List<TaskAttemptStatus>>();
+                Map<NodeID, List<AttemptStatus>> map = new TreeMap<NodeID, List<AttemptStatus>>();
                 synchronized (executions) {
-                    for (NodeID nodeId : node.getNodeIds()) {
-                        List<TaskAttemptStatus> status = new ArrayList<TaskAttemptStatus>();
-                        map.put(nodeId, status);
-                        // could index by node to avoid repeated iteration
-                        for (TaskExecution execution : executions.values()) {
-                            TaskExecutorTask task = execution.getTask();
-                            if (task.getNodeID().equals(nodeId))
-                                status.add(task.toImmutableStatus());
-                        }
+                    for (TaskExecution execution : executions.values()) {
+                        AttemptStatus status = execution.getTask().toImmutableStatus();
+                        NodeID nodeId = status.getNodeID();
+                        List<AttemptStatus> nodeStatus = map.get(nodeId);
+                        if (nodeStatus == null)
+                            map.put(nodeId, nodeStatus = new ArrayList<AttemptStatus>());
+                        nodeStatus.add(status);
                     }
                 }
-                int queueLength = executorService.getQueue().size();
-                TaskExecutorStatus status;
-                synchronized (this) {
-                    status = new TaskExecutorStatus(config.nodeId, cpuUtilization, queueLength, throttle);
-                }
-                for (Entry<NodeID, List<TaskAttemptStatus>> entry : map.entrySet()) {
+                for (Entry<NodeID, List<AttemptStatus>> entry : map.entrySet()) {
                     JobManagerService jobManager = node.getJobManagerService(entry.getKey());
-                    TaskAttemptStatus[] statuses = entry.getValue().toArray(new TaskAttemptStatus[0]);
+                    AttemptStatus[] statuses = entry.getValue().toArray(new AttemptStatus[0]);
                     try {
-                        jobManager.updateStatus(status, statuses);
+                        jobManager.updateStatus(statuses);
                     } catch (ConnectException e) {
-                        System.out.println("cannot reach node "+entry.getKey()+" for status update");
+                        System.out.println("cannot reach node " + entry.getKey() + " for status update");
                     }
                 }
             } catch (Throwable t) {

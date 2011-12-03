@@ -1,11 +1,11 @@
 package edu.illinois.cs.mapreduce.spi;
 
 import edu.illinois.cs.mr.NodeID;
-import edu.illinois.cs.mr.jm.Job;
-import edu.illinois.cs.mr.jm.TaskAttempt;
+import edu.illinois.cs.mr.jm.AttemptStatus;
+import edu.illinois.cs.mr.jm.JobStatus;
 
-public abstract class SelectionPolicy {
+public interface SelectionPolicy {
 
-    public abstract TaskAttempt selectAttempt(NodeID nodeID, Iterable<Job> jobs);
+    public abstract AttemptStatus selectAttempt(NodeID source, Iterable<JobStatus> jobs);
 
 }

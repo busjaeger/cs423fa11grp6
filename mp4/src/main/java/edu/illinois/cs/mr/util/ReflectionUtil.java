@@ -1,6 +1,7 @@
 package edu.illinois.cs.mr.util;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
@@ -24,29 +25,46 @@ public final class ReflectionUtil {
         return new URLClassLoader(urls);
     }
 
-    public static <T> T newInstance(String className, Class<?> paramClass, Object param) throws ClassNotFoundException,
-        IllegalAccessException, InstantiationException, InvocationTargetException, SecurityException,
-        NoSuchMethodException {
-        ClassLoader cl = ReflectionUtil.class.getClassLoader();
-        @SuppressWarnings("unchecked")
-        Class<T> clazz = (Class<T>)cl.loadClass(className);
+    public static <T, P> T newInstance(String className, Class<? super P> paramClass, P param) throws IOException {
         try {
-            return clazz.newInstance();
+            ClassLoader cl = ReflectionUtil.class.getClassLoader();
+            @SuppressWarnings("unchecked")
+            Class<T> clazz = (Class<T>)cl.loadClass(className);
+            try {
+                return clazz.newInstance();
+            } catch (InstantiationException e) {
+                Constructor<T> cons = clazz.getConstructor(paramClass);
+                return cons.newInstance(param);
+            }
         } catch (InstantiationException e) {
-            Constructor<T> cons = clazz.getConstructor(paramClass);
-            return cons.newInstance(param);
+            throw new IOException(e);
+        } catch (NoSuchMethodException e) {
+            throw new IOException(e);
+        } catch (InvocationTargetException e) {
+            throw new IOException(e);
+        } catch (IllegalAccessException e) {
+            throw new IOException(e);
+        } catch (ClassNotFoundException e) {
+            throw new IOException(e);
         }
     }
 
-    public static <T> T newInstance(String className, ClassLoader classLoader) throws ClassNotFoundException,
-        InstantiationException, IllegalAccessException {
-        @SuppressWarnings("unchecked")
-        Class<T> clazz = (Class<T>)classLoader.loadClass(className);
-        return clazz.newInstance();
+    public static <T> T newInstance(String className, ClassLoader classLoader) throws IOException {
+        try {
+            @SuppressWarnings("unchecked")
+            Class<T> clazz = (Class<T>)classLoader.loadClass(className);
+            return clazz.newInstance();
+        } catch (ClassNotFoundException e) {
+            throw new IOException(e);
+        } catch (InstantiationException e) {
+            throw new IOException(e);
+        } catch (IllegalAccessException e) {
+            throw new IOException(e);
+        }
+
     }
 
-    public static <T> T newInstance(String className, File... files) throws MalformedURLException,
-        ClassNotFoundException, InstantiationException, IllegalAccessException {
+    public static <T> T newInstance(String className, File... files) throws IOException {
         ClassLoader classLoader = createClassLoader(files);
         return newInstance(className, classLoader);
     }

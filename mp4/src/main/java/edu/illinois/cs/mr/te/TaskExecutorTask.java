@@ -3,11 +3,11 @@ package edu.illinois.cs.mr.te;
 import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.jm.JobDescriptor;
-import edu.illinois.cs.mr.jm.TaskAttempt;
-import edu.illinois.cs.mr.jm.TaskAttemptID;
-import edu.illinois.cs.mr.jm.TaskAttemptStatus;
+import edu.illinois.cs.mr.jm.Attempt;
+import edu.illinois.cs.mr.jm.AttemptID;
+import edu.illinois.cs.mr.jm.AttemptStatus;
 
-public abstract class TaskExecutorTask extends TaskAttempt {
+public abstract class TaskExecutorTask extends Attempt {
 
     private static final long serialVersionUID = 7637704493473769567L;
 
@@ -15,7 +15,7 @@ public abstract class TaskExecutorTask extends TaskAttempt {
     protected final JobDescriptor descriptor;
     protected String message;
 
-    public TaskExecutorTask(TaskAttemptID id,
+    public TaskExecutorTask(AttemptID id,
                             Path jarPath,
                             JobDescriptor descriptor,
                             Path outputPath,
@@ -53,8 +53,8 @@ public abstract class TaskExecutorTask extends TaskAttempt {
     }
 
     @Override
-    public synchronized TaskAttemptStatus toImmutableStatus() {
-        return new TaskAttemptStatus(this);
+    public synchronized AttemptStatus toImmutableStatus() {
+        return new AttemptStatus(this);
     }
 
 }

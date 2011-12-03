@@ -12,7 +12,7 @@ import java.util.StringTokenizer;
 
 import edu.illinois.cs.mapreduce.spi.lib.FirstWaitingSelectionPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.IdleTransferPolicy;
-import edu.illinois.cs.mapreduce.spi.lib.RoundRobinBootstrapPolicy;
+import edu.illinois.cs.mapreduce.spi.lib.RoundRobinNodeSelectionPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.ScoreBasedLocationPolicy;
 import edu.illinois.cs.mr.jm.JobManager;
 
@@ -45,20 +45,22 @@ public class NodeConfiguration {
 
         File fsRootDir = new File(props.getProperty("fs.root.dir", "/tmp/node1"));
 
-        String jmBootstrapPolicyClass = props.getProperty("jm.boostrap.policy", RoundRobinBootstrapPolicy.class.getName());
-        String jmTransferPolicyClass = props.getProperty("jm.transfer.policy", IdleTransferPolicy.class.getName());
-        String jmLocationPolicyClass = props.getProperty("jm.location.policy", ScoreBasedLocationPolicy.class.getName());
-        String jmSelectionPolicyClass = props.getProperty("jm.selection.policy", FirstWaitingSelectionPolicy.class.getName());
-
         int teNumThreads = toPositiveInt(props.getProperty("te.num.threads", "1"));
         double teThrottle = Double.parseDouble(props.getProperty("te.throttle", "0.0"));
-        int teThrottleInterval = Integer.parseInt(props.getProperty("te.throttleInterval", "1000"));
         int teStatusUpdateInterval = toPositiveInt(props.getProperty("te.status.update.interval", "5000"));
-        int teCpuProfilingInterval = toPositiveInt(props.getProperty("te.cpu.profiling.interval", "5000"));
 
-        return new NodeConfiguration(nodeId, port, nodeMap, teNumThreads, teThrottle, jmBootstrapPolicyClass,
-                                     jmTransferPolicyClass, jmLocationPolicyClass, jmSelectionPolicyClass,
-                                     teThrottleInterval, teStatusUpdateInterval, teCpuProfilingInterval, fsRootDir);
+        String lbBootstrapPolicyClass =
+            props.getProperty("lb.boostrap.policy", RoundRobinNodeSelectionPolicy.class.getName());
+        String lbTransferPolicyClass = props.getProperty("lb.transfer.policy", IdleTransferPolicy.class.getName());
+        String lbLocationPolicyClass =
+            props.getProperty("lb.location.policy", ScoreBasedLocationPolicy.class.getName());
+        String lbSelectionPolicyClass =
+            props.getProperty("lb.selection.policy", FirstWaitingSelectionPolicy.class.getName());
+        int lbStatusUpdateInterval = toPositiveInt(props.getProperty("lb.status.update.interval", "5000"));
+
+        return new NodeConfiguration(nodeId, port, nodeMap, lbBootstrapPolicyClass, lbTransferPolicyClass,
+                                     lbLocationPolicyClass, lbSelectionPolicyClass, lbStatusUpdateInterval,
+                                     teNumThreads, teThrottle, teStatusUpdateInterval, fsRootDir);
     }
 
     private static int toPort(String value) {
@@ -108,17 +110,16 @@ public class NodeConfiguration {
     public final int port;
     public final Map<NodeID, Endpoint> nodeMap;
 
-    public final String jmBootstrapPolicyClass;
-    public final String jmTransferPolicyClass;
-    public final String jmLocationPolicyClass;
-    public final String jmSelectionPolicyClass;
+    public final String lbBootstrapPolicyClass;
+    public final String lbTransferPolicyClass;
+    public final String lbLocationPolicyClass;
+    public final String lbSelectionPolicyClass;
+    public final int lbStatusUpdateInterval;
 
     // task executor configuration
     public final int teNumThreads;
     public final double teThrottle;
-    public final int teThrottleInterval;
     public final int teStatusUpdateInterval;
-    public final int teCpuProfilingInterval;
 
     // file system configuration
     public final File fsRootDir;
@@ -126,28 +127,26 @@ public class NodeConfiguration {
     public NodeConfiguration(NodeID nodeId,
                              int port,
                              Map<NodeID, Endpoint> nodeMap,
+                             String lbBootstrapPolicyClass,
+                             String lbTransferPolicyClass,
+                             String lbLocationPolicyClass,
+                             String lbSelectionPolicyClass,
+                             int lbStatusUpdateInterval,
                              int teNumThreads,
                              double teThrottle,
-                             String jmBootstrapPolicyClass,
-                             String jmTransferPolicyClass,
-                             String jmLocationPolicyClass,
-                             String jmSelectionPolicyClass,
-                             int teThrottleInterval,
                              int teStatusUpdateInterval,
-                             int teCpuProfilingInterval,
                              File fsRootDir) {
         this.nodeId = nodeId;
         this.port = port;
         this.nodeMap = nodeMap;
-        this.jmBootstrapPolicyClass = jmBootstrapPolicyClass;
-        this.jmTransferPolicyClass = jmTransferPolicyClass;
-        this.jmLocationPolicyClass = jmLocationPolicyClass;
-        this.jmSelectionPolicyClass = jmSelectionPolicyClass;
+        this.lbBootstrapPolicyClass = lbBootstrapPolicyClass;
+        this.lbTransferPolicyClass = lbTransferPolicyClass;
+        this.lbLocationPolicyClass = lbLocationPolicyClass;
+        this.lbSelectionPolicyClass = lbSelectionPolicyClass;
+        this.lbStatusUpdateInterval = lbStatusUpdateInterval;
         this.teNumThreads = teNumThreads;
         this.teThrottle = teThrottle;
-        this.teThrottleInterval = teThrottleInterval;
         this.teStatusUpdateInterval = teStatusUpdateInterval;
-        this.teCpuProfilingInterval = teCpuProfilingInterval;
         this.fsRootDir = fsRootDir;
     }
 

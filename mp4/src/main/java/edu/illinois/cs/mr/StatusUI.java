@@ -14,7 +14,7 @@ import edu.illinois.cs.mr.Node.NodeServices;
 import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.jm.Phase;
-import edu.illinois.cs.mr.jm.TaskAttemptStatus;
+import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.RPC;
 
@@ -30,7 +30,12 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
     
     @SuppressWarnings("rawtypes")
     private void BuildTree() {
-        JobID[] jobIds = services.getJobIDs();
+        JobID[] jobIds;
+        try {
+            jobIds = services.getJobIDs();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         for(int i=0; i<jobIds.length; i++)
         {
             boolean jobfound = false;
@@ -69,7 +74,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                         treeModel.insertNodeInto(tasknode, jobnode, jobnode.getChildCount());
                     }
                     
-                    for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                    for (AttemptStatus attempt : task.getAttemptStatuses()) {
                         DefaultMutableTreeNode attemptnode = null;
                         boolean attemptfound = false;
                         for (Enumeration e = tasknode.children(); e.hasMoreElements() ;) {
@@ -131,7 +136,7 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(jobid));
                 for (TaskStatus task : js.getTaskStatuses(Phase.MAP)) {
                     if(task.getId().getValue() == Integer.parseInt(taskid)) {
-                        for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+                        for (AttemptStatus attempt : task.getAttemptStatuses()) {
                             if(attempt.getId().getValue() == Integer.parseInt(id)) {
                                 labelState.setText("State: \t" + attempt.getState());
                                 labelState.setVisible(true);

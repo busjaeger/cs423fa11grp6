@@ -12,7 +12,7 @@ import edu.illinois.cs.mr.util.Status;
  * 
  * @author benjamin
  */
-public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implements Serializable {
+public class Attempt extends Status<AttemptID, AttemptStatus> implements Serializable {
 
     private static final long serialVersionUID = -1954349780451419520L;
 
@@ -20,7 +20,7 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
     protected String message;
     protected final NodeID targetNodeID;
 
-    public TaskAttempt(TaskAttemptID id, NodeID targetNodeID, Path outputPath) {
+    public Attempt(AttemptID id, NodeID targetNodeID, Path outputPath) {
         super(id);
         this.targetNodeID = targetNodeID;
         this.outputPath = outputPath;
@@ -51,7 +51,7 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
     }
 
     @Override
-    public synchronized boolean update(TaskAttemptStatus newStatus) {
+    public synchronized boolean update(AttemptStatus newStatus) {
         if (super.update(newStatus)) {
             message = newStatus.getMessage();
             return true;
@@ -60,8 +60,8 @@ public class TaskAttempt extends Status<TaskAttemptID, TaskAttemptStatus> implem
     }
 
     @Override
-    public synchronized TaskAttemptStatus toImmutableStatus() {
-        return new TaskAttemptStatus(this);
+    public synchronized AttemptStatus toImmutableStatus() {
+        return new AttemptStatus(this);
     }
 
 }

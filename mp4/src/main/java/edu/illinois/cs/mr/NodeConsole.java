@@ -9,7 +9,7 @@ import edu.illinois.cs.mr.Node.NodeServices;
 import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.jm.Phase;
-import edu.illinois.cs.mr.jm.TaskAttemptStatus;
+import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
@@ -155,7 +155,7 @@ public class NodeConsole {
             System.out.println("    " + phase + " Task #" + task.getId().getValue());
             System.out.println("      State: " + task.getState());
             printTimes(task, "      ");
-            for (TaskAttemptStatus attempt : task.getAttemptStatuses()) {
+            for (AttemptStatus attempt : task.getAttemptStatuses()) {
                 System.out.println("      Attempt " + attempt.getId().getValue());
                 System.out.println("        State: " + attempt.getState());
                 System.out.println("        On Node:" + attempt.getTargetNodeID());

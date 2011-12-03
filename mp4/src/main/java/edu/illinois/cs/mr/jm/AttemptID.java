@@ -2,11 +2,11 @@ package edu.illinois.cs.mr.jm;
 
 import edu.illinois.cs.mr.util.ChildID;
 
-public class TaskAttemptID extends ChildID<TaskID, TaskAttemptID> {
+public class AttemptID extends ChildID<TaskID, AttemptID> {
 
     private static final long serialVersionUID = 6020078575717454617L;
 
-    public TaskAttemptID(TaskID taskID, int value) {
+    public AttemptID(TaskID taskID, int value) {
         super(taskID, value);
     }
 

@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import edu.illinois.cs.mr.Node.NodeService;
-import edu.illinois.cs.mr.jm.TaskAttemptID;
+import edu.illinois.cs.mr.jm.AttemptID;
 
 
 /**
@@ -34,17 +34,17 @@ public interface TaskExecutorService extends NodeService {
      * @throws IOException
      * @throws TimeoutException
      */
-    boolean cancel(TaskAttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException;
+    boolean cancel(AttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException;
 
     /**
      * Must be called only after successful call to
-     * {@link #cancel(TaskAttemptID, long, TimeUnit)}
+     * {@link #cancel(AttemptID, long, TimeUnit)}
      * 
      * @param id
      * @return
      * @throws IOException
      */
-    boolean delete(TaskAttemptID id) throws IOException;
+    boolean delete(AttemptID id) throws IOException;
     
     void setThrottle(double value) throws IOException;
 

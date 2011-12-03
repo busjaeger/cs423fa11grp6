@@ -1,61 +1,27 @@
 package edu.illinois.cs.mapreduce.spi.lib;
 
 import edu.illinois.cs.mapreduce.spi.LocationPolicy;
-import edu.illinois.cs.mr.NodeID;
-import edu.illinois.cs.mr.NodeStatus;
+import edu.illinois.cs.mapreduce.spi.NodeSelectionPolicy;
+import edu.illinois.cs.mr.lb.NodeStatus;
 
-public class ScoreBasedLocationPolicy extends LocationPolicy {
+public class ScoreBasedLocationPolicy implements LocationPolicy {
 
-    /**
-     * Searches through list of busy nodes to find the busiest node
-     * 
-     * @param list of busy nodes' statuses
-     * @return NodeID of busiest node
-     */
-    @Override
-    public NodeID source(Iterable<NodeStatus> nodeStatuses) {
-        NodeID busiest = null;
-        double busiestScore = 0.0;
-        for (NodeStatus nodeStatus : nodeStatuses) {
-            if (busiest == null) {
-                // This will always be the
-                // case on 2 node clusters
-                busiest = nodeStatus.getNodeID();
-                busiestScore = computeNodeScore(nodeStatus);
-            } else {
-                double myScore = computeNodeScore(nodeStatus);
-                if (myScore > busiestScore) {
-                    busiest = nodeStatus.getNodeID();
-                    busiestScore = myScore;
-                }
-            }
-        }
-        return busiest;
+    private final NodeSelectionPolicy sourcePolicy;
+    private final NodeSelectionPolicy targetPolicy;
+
+    public ScoreBasedLocationPolicy() {
+        this.sourcePolicy = new BusiestNodeSelectPolicy();
+        this.targetPolicy = new IdlestNodeSelectionPolicy();
     }
 
-    /**
-     * Searches through list of idle nodes to find the least busy node
-     * 
-     * @param list of idle nodes' statuses
-     * @return NodeID of least busy node
-     */
     @Override
-    public NodeID target(Iterable<NodeStatus> nodeStatuses) {
-        NodeID idlest = null;
-        double idlestScore = 1000.0;
-        for (NodeStatus nodeStatus : nodeStatuses) {
-            if (idlest == null) {
-                idlest = nodeStatus.getNodeID();
-                idlestScore = computeNodeScore(nodeStatus);
-            } else {
-                double myScore = computeNodeScore(nodeStatus);
-                if (myScore < idlestScore) {
-                    idlest = nodeStatus.getNodeID();
-                    idlestScore = myScore;
-                }
-            }
-        }
-        return idlest;
+    public NodeSelectionPolicy getSourcePolicy() {
+        return sourcePolicy;
+    }
+
+    @Override
+    public NodeSelectionPolicy getTargetPolicy() {
+        return targetPolicy;
     }
 
     /**
@@ -64,10 +30,10 @@ public class ScoreBasedLocationPolicy extends LocationPolicy {
      * @param ns
      * @return score
      */
-    private double computeNodeScore(NodeStatus ns) {
+    public static double computeNodeScore(NodeStatus ns) {
         double averageScore = (ns.getAvgCpuUtilization() + ns.getThrottle() + 1) * (ns.getAvgQueueLength() + 1);
         double lastScore = (ns.getCpuUtilization() + ns.getThrottle() + 1) * (ns.getQueueLength() + 1);
-        double score = (lastScore + averageScore) / 2;
-        return score;
+        return (lastScore + averageScore) / 2;
     }
+
 }

@@ -37,21 +37,19 @@ class TaskRunner implements Runnable {
     private final TaskExecutorTask task;
     private final Node node;
     private final Semaphore completion;
-    private final int sleepInterval;
 
     private FileSystem fileSystem;
     private ClassLoader classLoader;
     private JobDescriptor descriptor;
 
-    public TaskRunner(int sleepForInterval, TaskExecutorTask task, Semaphore completion, Node node) {
-        this.sleepInterval = sleepForInterval;
+    public TaskRunner(TaskExecutorTask task, Semaphore completion, Node node) {
     	this.task = task;
         this.completion = completion;
         this.node = node;
     }
 
     private void init() throws IOException {
-        this.fileSystem = node.getLocalFileSystem();
+        this.fileSystem = node.getFileSystem();
         Path jarPath = task.getJarPath();
         URL jarURL = fileSystem.toURL(jarPath);
         this.classLoader = ReflectionUtil.createClassLoader(jarURL);
@@ -61,7 +59,6 @@ class TaskRunner implements Runnable {
     @Override
     public void run() {
         try {
-            Thread.sleep(this.sleepInterval);
             task.setState(State.RUNNING);
             init();
             if (task.isMap())
@@ -120,8 +117,7 @@ class TaskRunner implements Runnable {
         }
     }
 
-    private <T> T newInstance(String className) throws ClassNotFoundException, InstantiationException,
-        IllegalAccessException {
+    private <T> T newInstance(String className) throws IOException {
         return ReflectionUtil.newInstance(className, classLoader);
     }
 

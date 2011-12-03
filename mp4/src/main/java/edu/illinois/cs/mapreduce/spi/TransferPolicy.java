@@ -1,9 +1,9 @@
 package edu.illinois.cs.mapreduce.spi;
 
-import edu.illinois.cs.mr.NodeStatus;
+import edu.illinois.cs.mr.lb.NodeStatus;
 
-public abstract class TransferPolicy {
+public interface TransferPolicy {
 
-    public abstract boolean isTransferNeeded(NodeStatus newStatus, Iterable<NodeStatus> statuses);
+    boolean isTransferNeeded(NodeStatus newStatus, Iterable<NodeStatus> statuses);
 
 }

@@ -84,7 +84,7 @@ public class Job extends PhasedStatus<JobID, JobStatus, Phase> {
         return new JobStatus(this);
     }
 
-    public synchronized boolean updateStatus(TaskAttemptStatus[] attemptStatuses, int offset, int length) {
+    public synchronized boolean updateStatus(AttemptStatus[] attemptStatuses, int offset, int length) {
         // update task statuses
         boolean stateChange = false;
         int off = offset, len = 1;

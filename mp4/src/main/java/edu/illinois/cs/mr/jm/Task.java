@@ -19,28 +19,28 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
     private static final long serialVersionUID = -6364601903551472322L;
 
     private final AtomicInteger attemptCounter;
-    private final Map<TaskAttemptID, TaskAttempt> attempts;
+    private final Map<AttemptID, Attempt> attempts;
 
     public Task(TaskID id) {
         super(id);
         this.attemptCounter = new AtomicInteger();
-        this.attempts = new TreeMap<TaskAttemptID, TaskAttempt>(ID.<TaskAttemptID> getValueComparator());
+        this.attempts = new TreeMap<AttemptID, Attempt>(ID.<AttemptID> getValueComparator());
     }
 
-    public TaskAttemptID nextAttemptID() {
-        return new TaskAttemptID(id, attemptCounter.incrementAndGet());
+    public AttemptID nextAttemptID() {
+        return new AttemptID(id, attemptCounter.incrementAndGet());
     }
 
-    public synchronized void addAttempt(TaskAttempt attempt) {
+    public synchronized void addAttempt(Attempt attempt) {
         attempts.put(attempt.getId(), attempt);
     }
 
-    public synchronized TaskAttempt getAttempt(TaskAttemptID attemptId) {
+    public synchronized Attempt getAttempt(AttemptID attemptId) {
         return attempts.get(attemptId);
     }
 
-    public synchronized TaskAttempt getSuccessfulAttempt() {
-        for (TaskAttempt attempt : attempts.values())
+    public synchronized Attempt getSuccessfulAttempt() {
+        for (Attempt attempt : attempts.values())
             if (attempt.getState() == State.SUCCEEDED)
                 return attempt;
         return null;
@@ -52,7 +52,7 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
      * 
      * @return
      */
-    public Iterable<TaskAttempt> getAttempts() {
+    public Iterable<Attempt> getAttempts() {
         return attempts.values();
     }
 
@@ -61,11 +61,11 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
         return new TaskStatus(this);
     }
 
-    public synchronized boolean updateStatus(TaskAttemptStatus[] statuses, int offset, int length) {
+    public synchronized boolean updateStatus(AttemptStatus[] statuses, int offset, int length) {
         boolean stateChange = false;
         for (int i = offset; i < offset + length; i++) {
-            TaskAttemptStatus status = statuses[i];
-            TaskAttempt attempt = attempts.get(status.getId());
+            AttemptStatus status = statuses[i];
+            Attempt attempt = attempts.get(status.getId());
             stateChange |= attempt.update(status);
         }
         return stateChange ? updateStatus() : stateChange;
@@ -99,7 +99,7 @@ public class Task extends Status<TaskID, TaskStatus> implements Serializable {
             return State.CREATED;
         State last = null;
         boolean running = false, waiting = false, created = false;
-        for (TaskAttempt attempt : attempts.values()) {
+        for (Attempt attempt : attempts.values()) {
             State state = attempt.getState();
             switch (state) {
                 case SUCCEEDED:

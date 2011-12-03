@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,21 +23,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Partition;
 import edu.illinois.cs.mapreduce.api.Partitioner;
-import edu.illinois.cs.mapreduce.spi.BootstrapPolicy;
-import edu.illinois.cs.mapreduce.spi.LocationPolicy;
-import edu.illinois.cs.mapreduce.spi.SelectionPolicy;
-import edu.illinois.cs.mapreduce.spi.TransferPolicy;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.NodeID;
-import edu.illinois.cs.mr.NodeStatus;
 import edu.illinois.cs.mr.fs.FileSystemService;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.fs.QualifiedPath;
 import edu.illinois.cs.mr.te.TaskExecutorMapTask;
 import edu.illinois.cs.mr.te.TaskExecutorReduceTask;
 import edu.illinois.cs.mr.te.TaskExecutorService;
-import edu.illinois.cs.mr.te.TaskExecutorStatus;
 import edu.illinois.cs.mr.util.ReflectionUtil;
 import edu.illinois.cs.mr.util.Status.State;
 
@@ -48,42 +43,14 @@ import edu.illinois.cs.mr.util.Status.State;
 public class JobManager implements JobManagerService {
 
     private final NodeConfiguration config;
-    private Node node;
-    private final TransferPolicy transferPolicy;
-    private final BootstrapPolicy bootstrapPolicy;
-    private final LocationPolicy locationPolicy;
-    private final SelectionPolicy selectionPolicy;
     private final AtomicInteger counter;
-    private volatile boolean transferring;
     private final Map<JobID, Job> jobs;
-    private final Map<NodeID, NodeStatus> nodeStatuses;
+    private Node node;// quasi immutable
 
-    public JobManager(NodeConfiguration config) throws Exception {
-        this(
-             config,
-             ReflectionUtil.<TransferPolicy> newInstance(config.jmTransferPolicyClass, NodeConfiguration.class, config),
-             ReflectionUtil.<BootstrapPolicy> newInstance(config.jmBootstrapPolicyClass,
-                                                          NodeConfiguration.class,
-                                                          config),
-             ReflectionUtil.<LocationPolicy> newInstance(config.jmLocationPolicyClass, NodeConfiguration.class, config),
-             ReflectionUtil.<SelectionPolicy> newInstance(config.jmSelectionPolicyClass,
-                                                          NodeConfiguration.class,
-                                                          config));
-    }
-
-    JobManager(NodeConfiguration config,
-               TransferPolicy transferPolicy,
-               BootstrapPolicy bootstrapPolicy,
-               LocationPolicy locationPolicy,
-               SelectionPolicy selectionPolicy) {
+    public JobManager(NodeConfiguration config) {
         this.config = config;
-        this.transferPolicy = transferPolicy;
-        this.bootstrapPolicy = bootstrapPolicy;
-        this.locationPolicy = locationPolicy;
-        this.selectionPolicy = selectionPolicy;
         this.counter = new AtomicInteger();
         this.jobs = new TreeMap<JobID, Job>();
-        this.nodeStatuses = new TreeMap<NodeID, NodeStatus>();
     }
 
     @Override
@@ -104,6 +71,28 @@ public class JobManager implements JobManagerService {
     public JobID[] getJobIDs() {
         synchronized (jobs) {
             return (JobID[])jobs.keySet().toArray();
+        }
+    }
+
+    /**
+     * @see {@link edu.illinois.cs.mapreduce.JobMangerService#}
+     */
+    @Override
+    public JobStatus getJobStatus(JobID jobID) throws IOException {
+        Job job;
+        synchronized (jobs) {
+            job = jobs.get(jobID);
+        }
+        return job.toImmutableStatus();
+    }
+
+    public Iterable<JobStatus> getJobStatuses() {
+        synchronized (jobs) {
+            Collection<Job> jobList = jobs.values();
+            Collection<JobStatus> statuses = new ArrayList<JobStatus>(jobList.size());
+            for (Job job : jobList)
+                statuses.add(job.toImmutableStatus());
+            return statuses;
         }
     }
 
@@ -161,9 +150,9 @@ public class JobManager implements JobManagerService {
      * @throws InstantiationException
      * @throws ClassNotFoundException
      * @throws IOException
+     * @throws InterruptedException 
      */
-    private void submitMapTasks(Job job, File jarFile, File inputFile) throws ClassNotFoundException,
-        InstantiationException, IllegalAccessException, IOException {
+    private void submitMapTasks(Job job, File jarFile, File inputFile) throws IOException, InterruptedException {
         JobDescriptor descriptor = job.getDescriptor();
         InputFormat<?, ?, ?> inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
         InputStream is = new FileInputStream(inputFile);
@@ -172,23 +161,17 @@ public class JobManager implements JobManagerService {
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
             MapTask previous = null;
-            TaskAttempt previousAttempt = null;
+            Attempt previousAttempt = null;
             while (!partitioner.isEOF()) {
-                // 1. chose node to run task on
-                // current selection policy: round-robin
-                // TODO: capacity-based selection policy
-                NodeID targetNodeId;
-                synchronized (nodeStatuses) {
-                    targetNodeId = bootstrapPolicy.selectNode(num, node.getNodeIds(), nodeStatuses);
-                }
+                // 1. ask load balancer which node to place task on
+                NodeID targetNodeId = node.getLoadBalancer().selectNode();
 
-                // 1. create sub task for the partition
+                // 2. create task ID for the partition
                 TaskID taskId = new TaskID(job.getId(), num, true);
                 Path inputPath = job.getPath().append(taskId + "-input");
 
                 // 3. write partition to node's file system
                 final FileSystemService fs = node.getFileSystemService(targetNodeId);
-
                 Partition partition = writePartition(partitioner, inputPath, fs);
 
                 // 4. write job file if not already written
@@ -202,15 +185,17 @@ public class JobManager implements JobManagerService {
                     nodesWithJar.add(targetNodeId);
                 }
 
+                // 5. create and register task
                 MapTask task = new MapTask(taskId, partition, inputPath);
                 job.addTask(task);
-                // 5. create and register task attempt
-                TaskAttemptID attemptID = task.nextAttemptID();
+
+                // 6. create and register task attempt
+                AttemptID attemptID = task.nextAttemptID();
                 Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
-                TaskAttempt attempt = new TaskAttempt(attemptID, targetNodeId, outputPath);
+                Attempt attempt = new Attempt(attemptID, targetNodeId, outputPath);
                 task.addAttempt(attempt);
 
-                // 6. submit previous task
+                // 7. submit previous task
                 if (previous != null)
                     submitMapTaskAttempt(job, previous, previousAttempt);
                 previous = task;
@@ -229,9 +214,10 @@ public class JobManager implements JobManagerService {
      * the only purpose of this complex chunk of code is to turn the
      * OutputStream the partitioner needs into an InputStream for the file
      * system
+     * @throws InterruptedException 
      */
     private Partition writePartition(final Partitioner<?> partitioner, Path inputPath, final FileSystemService fs)
-        throws IOException {
+        throws IOException, InterruptedException {
         Partition partition;
         final PipedOutputStream pos = new PipedOutputStream();
         try {
@@ -249,9 +235,6 @@ public class JobManager implements JobManagerService {
             fs.write(inputPath, pis);
             try {
                 partition = future.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
             } catch (ExecutionException e) {
                 Throwable t = e.getCause();
                 if (t instanceof IOException)
@@ -268,7 +251,7 @@ public class JobManager implements JobManagerService {
         return partition;
     }
 
-    private void submitMapTaskAttempt(Job job, MapTask task, TaskAttempt attempt) throws IOException {
+    private void submitMapTaskAttempt(Job job, MapTask task, Attempt attempt) throws IOException {
         TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorMapTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
             .getOutputPath(), attempt.getTargetNodeID(), task.getPartition(), task.getInputPath()));
@@ -291,7 +274,7 @@ public class JobManager implements JobManagerService {
         List<QualifiedPath> inputPaths = new ArrayList<QualifiedPath>();
         synchronized (job) {
             for (MapTask mapTask : job.getMapTasks()) {
-                TaskAttempt attempt = mapTask.getSuccessfulAttempt();
+                Attempt attempt = mapTask.getSuccessfulAttempt();
                 if (attempt == null)
                     throw new IllegalStateException("Map task " + mapTask.getId()
                         + " does not have a succeeded attempt");
@@ -302,9 +285,9 @@ public class JobManager implements JobManagerService {
         ReduceTask task = new ReduceTask(taskID, inputPaths);
 
         // 2. create attempt
-        TaskAttemptID attemptId = new TaskAttemptID(taskID, 1);
+        AttemptID attemptId = new AttemptID(taskID, 1);
         Path outputPath = job.getPath().append("output");
-        TaskAttempt attempt = new TaskAttempt(attemptId, config.nodeId, outputPath);
+        Attempt attempt = new Attempt(attemptId, config.nodeId, outputPath);
         task.addAttempt(attempt);
 
         // 3. register and submit task
@@ -312,22 +295,10 @@ public class JobManager implements JobManagerService {
         submitReduceTaskAttemp(job, task, attempt);
     }
 
-    private void submitReduceTaskAttemp(Job job, ReduceTask task, TaskAttempt attempt) throws IOException {
+    private void submitReduceTaskAttemp(Job job, ReduceTask task, Attempt attempt) throws IOException {
         TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorReduceTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
             .getOutputPath(), attempt.getTargetNodeID(), task.getInputPaths()));
-    }
-
-    /**
-     * @see {@link edu.illinois.cs.mapreduce.JobMangerService#}
-     */
-    @Override
-    public JobStatus getJobStatus(JobID jobID) throws IOException {
-        Job job;
-        synchronized (jobs) {
-            job = jobs.get(jobID);
-        }
-        return job.toImmutableStatus();
     }
 
     /**
@@ -335,15 +306,15 @@ public class JobManager implements JobManagerService {
      * contract requires that attempt status objects be sorted by id.
      */
     @Override
-    public boolean updateStatus(TaskExecutorStatus status, TaskAttemptStatus[] taskStatuses) throws IOException {
+    public boolean updateStatus(AttemptStatus[] statuses) throws IOException {
         boolean stateChange = false;
-        if (taskStatuses.length > 0) {
+        if (statuses.length > 0) {
             int offset = 0, len = 1;
-            JobID jobId = taskStatuses[0].getJobID();
-            for (int i = 1; i < taskStatuses.length; i++) {
-                JobID current = taskStatuses[i].getJobID();
+            JobID jobId = statuses[0].getJobID();
+            for (int i = 1; i < statuses.length; i++) {
+                JobID current = statuses[i].getJobID();
                 if (!current.equals(jobId)) {
-                    stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
+                    stateChange |= updateJobStatus(jobId, statuses, offset, len);
                     offset = i;
                     len = 1;
                     jobId = current;
@@ -351,25 +322,7 @@ public class JobManager implements JobManagerService {
                     len++;
                 }
             }
-            stateChange |= updateJobStatus(jobId, taskStatuses, offset, len);
-        }
-        synchronized (nodeStatuses) {
-            NodeID nodeId = status.getNodeID();
-            NodeStatus ns = nodeStatuses.get(nodeId);
-            if (ns == null)
-                nodeStatuses.put(nodeId, ns = new NodeStatus(status));
-            ns.update(status);
-            final NodeStatus nodeStatus = ns;
-            if (!transferring && nodeStatuses.size() > 1
-                && transferPolicy.isTransferNeeded(nodeStatus, nodeStatuses.values())) {
-                transferring = true;
-                node.getExecutorService().submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        rebalance(nodeStatus);
-                    }
-                });
-            }
+            stateChange |= updateJobStatus(jobId, statuses, offset, len);
         }
         return stateChange;
     }
@@ -386,8 +339,7 @@ public class JobManager implements JobManagerService {
      * @return
      * @throws IOException
      */
-    private boolean updateJobStatus(JobID jobId, TaskAttemptStatus[] statuses, int offset, int length)
-        throws IOException {
+    private boolean updateJobStatus(JobID jobId, AttemptStatus[] statuses, int offset, int length) throws IOException {
         boolean stateChanged;
         final Job job;
         synchronized (jobs) {
@@ -412,36 +364,6 @@ public class JobManager implements JobManagerService {
         return stateChanged;
     }
 
-    private void rebalance(NodeStatus nodeStatus) {
-        try {
-            NodeID source;
-            NodeID target;
-            synchronized (nodeStatuses) {
-                source = locationPolicy.source(nodeStatuses.values());
-                target = locationPolicy.target(nodeStatuses.values());
-            }
-            if (!source.equals(config.nodeId))
-                return;
-            if (source == target) {
-                System.err.println("Same source and target selected");
-                return;
-            }
-            TaskAttempt attempt;
-            synchronized (jobs) {
-                attempt = selectionPolicy.selectAttempt(source, jobs.values());
-            }
-            if (attempt == null) {
-                System.out.println("No suitable task found to transfer from " + source + " to " + target);
-                return;
-            }
-            transferTask(target, attempt);
-        } catch (Throwable e) {
-            e.printStackTrace();
-        } finally {
-            transferring = false;
-        }
-    }
-
     /**
      * transfer a task attempt from current node to a different one
      * 
@@ -449,7 +371,7 @@ public class JobManager implements JobManagerService {
      * @param free
      * @throws IOException
      */
-    private void transferTask(NodeID target, TaskAttempt attempt) throws IOException {
+    public void migrateTask(NodeID target, AttemptStatus attempt) throws IOException {
         Job job;
         synchronized (jobs) {
             job = jobs.get(attempt.getJobID());
@@ -474,9 +396,9 @@ public class JobManager implements JobManagerService {
             targetFs.write(inputPath, sourceFs.read(inputPath));
 
         // create a new attempt
-        TaskAttemptID attemptID = task.nextAttemptID();
+        AttemptID attemptID = task.nextAttemptID();
         Path outputPath = job.getPath().append(attemptID.toQualifiedString(1) + "-output");
-        TaskAttempt newAttempt = new TaskAttempt(attemptID, target, outputPath);
+        Attempt newAttempt = new Attempt(attemptID, target, outputPath);
         task.addAttempt(newAttempt);
 
         submitMapTaskAttempt(job, task, newAttempt);

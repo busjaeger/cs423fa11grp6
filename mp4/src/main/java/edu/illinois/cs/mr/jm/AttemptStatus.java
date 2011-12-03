@@ -10,14 +10,14 @@ import edu.illinois.cs.mr.util.ImmutableStatus;
  * 
  * @author benjamin
  */
-public class TaskAttemptStatus extends ImmutableStatus<TaskAttemptID> implements Serializable {
+public class AttemptStatus extends ImmutableStatus<AttemptID> implements Serializable {
 
     private static final long serialVersionUID = -52586956350693369L;
 
     private final NodeID targetNodeID;
     private final String message;
 
-    public TaskAttemptStatus(TaskAttempt attempt) {
+    public AttemptStatus(Attempt attempt) {
         super(attempt);
         this.targetNodeID = attempt.getTargetNodeID();
         this.message = attempt.getMessage();
