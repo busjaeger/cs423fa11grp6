@@ -25,11 +25,11 @@ Extensions implemented
 ##################################################
 
 1. support for user-defined map reduce functions
-2. support custom input format and task partitioning
+2. support custom input format for splitting input files and reading split records
 3. support for more than 2 nodes
 4. ability to execute arbitrary number of jobs concurrently on different nodes
 5. runtime properties configurable, e.g. number of threads, heartbeat interval etc.
-6. jobs configurable, e.g. input partition size, output key/value separator
+6. jobs configurable, e.g. input split size, output key/value separator
 7. console that can connect to to any node and execute commands
 8. display total time, wait time, running time for each job, task, and attempt
 9. bootstrap policy for initial task distribution

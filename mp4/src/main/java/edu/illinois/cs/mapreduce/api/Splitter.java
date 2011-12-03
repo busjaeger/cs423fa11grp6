@@ -3,7 +3,7 @@ package edu.illinois.cs.mapreduce.api;
 import java.io.IOException;
 import java.io.OutputStream;
 
-public abstract class Partitioner<P extends Partition> {
+public abstract class Splitter<S extends Split> {
 
     protected boolean eof = false;
 
@@ -11,6 +11,6 @@ public abstract class Partitioner<P extends Partition> {
         return eof;
     }
 
-    public abstract P writePartition(OutputStream os) throws IOException;
+    public abstract S writeSplit(OutputStream os) throws IOException;
 
 }

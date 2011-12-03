@@ -19,8 +19,8 @@ import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.jm.AttemptStatus;
 import edu.illinois.cs.mr.jm.JobManager;
 import edu.illinois.cs.mr.jm.JobStatus;
-import edu.illinois.cs.mr.te.CpuProfiler;
 import edu.illinois.cs.mr.te.TaskExecutor;
+import edu.illinois.cs.mr.util.CpuProfiler;
 
 public class LoadBalancer implements LoadBalancerService {
 

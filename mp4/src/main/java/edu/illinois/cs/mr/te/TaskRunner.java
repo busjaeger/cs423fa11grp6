@@ -19,7 +19,7 @@ import edu.illinois.cs.mapreduce.api.Context;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Mapper;
 import edu.illinois.cs.mapreduce.api.OutputFormat;
-import edu.illinois.cs.mapreduce.api.Partition;
+import edu.illinois.cs.mapreduce.api.Split;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 import edu.illinois.cs.mapreduce.api.RecordWriter;
 import edu.illinois.cs.mapreduce.api.Reducer;
@@ -88,8 +88,8 @@ class TaskRunner implements Runnable {
     private <K1, V1, K2, V2> void runMap(TaskExecutorMapTask mapTask) throws Exception {
         // create object instances
         Mapper<K1, V1, K2, V2> mapper = newInstance(descriptor.getMapperClass());
-        InputFormat<K1, V1, ? super Partition> inputFormat = newInstance(descriptor.getInputFormatClass());
-        Partition partition = mapTask.getPartition();
+        InputFormat<K1, V1, ? super Split> inputFormat = newInstance(descriptor.getInputFormatClass());
+        Split split = mapTask.getSplit();
         Reducer<K2, V2, K2, V2> combiner = null;
         String combinerClass = descriptor.getCombinerClass();
         if (combinerClass != null)
@@ -97,7 +97,7 @@ class TaskRunner implements Runnable {
         // run map
         InputStream is = fileSystem.read(mapTask.getInputPath());
         try {
-            RecordReader<K1, V1> reader = inputFormat.createRecordReader(partition, is);
+            RecordReader<K1, V1> reader = inputFormat.createRecordReader(split, is);
             try {
                 OutputStream os = fileSystem.write(mapTask.getOutputPath());
                 try {

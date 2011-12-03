@@ -21,8 +21,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import edu.illinois.cs.mapreduce.api.InputFormat;
-import edu.illinois.cs.mapreduce.api.Partition;
-import edu.illinois.cs.mapreduce.api.Partitioner;
+import edu.illinois.cs.mapreduce.api.Split;
+import edu.illinois.cs.mapreduce.api.Splitter;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.NodeConfiguration;
 import edu.illinois.cs.mr.NodeID;
@@ -131,7 +131,7 @@ public class JobManager implements JobManagerService {
      * inputFile, but do not want to assume that it will still exist after
      * submitJob returns. I.e. a user is free to delete or edit the input file
      * after submitting the job. We also do not want to create a copy of the
-     * file, because we want to support very large input files, so partitioning
+     * file, because we want to support very large input files, so splitting
      * it directly is faster.
      * </p>
      * <p>
@@ -157,22 +157,22 @@ public class JobManager implements JobManagerService {
         InputFormat<?, ?, ?> inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
         InputStream is = new FileInputStream(inputFile);
         try {
-            final Partitioner<?> partitioner = inputFormat.createPartitioner(is, descriptor.getProperties());
+            final Splitter<?> splitter = inputFormat.createSplitter(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
             MapTask previous = null;
             Attempt previousAttempt = null;
-            while (!partitioner.isEOF()) {
+            while (!splitter.isEOF()) {
                 // 1. ask load balancer which node to place task on
                 NodeID targetNodeId = node.getLoadBalancer().selectNode();
 
-                // 2. create task ID for the partition
+                // 2. create task ID for the split
                 TaskID taskId = new TaskID(job.getId(), num, true);
                 Path inputPath = job.getPath().append(taskId + "-input");
 
-                // 3. write partition to node's file system
+                // 3. write split to node's file system
                 final FileSystemService fs = node.getFileSystemService(targetNodeId);
-                Partition partition = writePartition(partitioner, inputPath, fs);
+                Split split = writeSplit(splitter, inputPath, fs);
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(targetNodeId)) {
@@ -186,7 +186,7 @@ public class JobManager implements JobManagerService {
                 }
 
                 // 5. create and register task
-                MapTask task = new MapTask(taskId, partition, inputPath);
+                MapTask task = new MapTask(taskId, split, inputPath);
                 job.addTask(task);
 
                 // 6. create and register task attempt
@@ -216,17 +216,17 @@ public class JobManager implements JobManagerService {
      * system
      * @throws InterruptedException 
      */
-    private Partition writePartition(final Partitioner<?> partitioner, Path inputPath, final FileSystemService fs)
+    private Split writeSplit(final Splitter<?> splitter, Path inputPath, final FileSystemService fs)
         throws IOException, InterruptedException {
-        Partition partition;
+        Split split;
         final PipedOutputStream pos = new PipedOutputStream();
         try {
             final PipedInputStream pis = new PipedInputStream(pos);
-            Future<Partition> future = node.getExecutorService().submit(new Callable<Partition>() {
+            Future<Split> future = node.getExecutorService().submit(new Callable<Split>() {
                 @Override
-                public Partition call() throws IOException {
+                public Split call() throws IOException {
                     try {
-                        return partitioner.writePartition(pos);
+                        return splitter.writeSplit(pos);
                     } finally {
                         pos.close();
                     }
@@ -234,7 +234,7 @@ public class JobManager implements JobManagerService {
             });
             fs.write(inputPath, pis);
             try {
-                partition = future.get();
+                split = future.get();
             } catch (ExecutionException e) {
                 Throwable t = e.getCause();
                 if (t instanceof IOException)
@@ -248,13 +248,13 @@ public class JobManager implements JobManagerService {
         } finally {
             pos.close();
         }
-        return partition;
+        return split;
     }
 
     private void submitMapTaskAttempt(Job job, MapTask task, Attempt attempt) throws IOException {
         TaskExecutorService taskExecutor = node.getTaskExecutorService(attempt.getTargetNodeID());
         taskExecutor.execute(new TaskExecutorMapTask(attempt.getId(), job.getJarPath(), job.getDescriptor(), attempt
-            .getOutputPath(), attempt.getTargetNodeID(), task.getPartition(), task.getInputPath()));
+            .getOutputPath(), attempt.getTargetNodeID(), task.getSplit(), task.getInputPath()));
     }
 
     /**

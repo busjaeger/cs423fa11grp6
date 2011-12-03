@@ -8,29 +8,29 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 
-import edu.illinois.cs.mapreduce.api.Partitioner;
+import edu.illinois.cs.mapreduce.api.Splitter;
 
 // TODO could be enhanced to read lines for given
 // numbers of bits as opposed to number of lines
-public class TextPartitioner extends Partitioner<TextPartition> {
+public class TextSplitter extends Splitter<TextSplit> {
 
     private final BufferedReader reader;
     private final long numLines;
     private long lineNumber;
 
-    public TextPartitioner(InputStream is, long numLines) {
+    public TextSplitter(InputStream is, long numLines) {
         this(new BufferedReader(new InputStreamReader(is)), numLines);
     }
 
-    public TextPartitioner(BufferedReader reader, long numLines) {
+    public TextSplitter(BufferedReader reader, long numLines) {
         this.reader = reader;
         this.numLines = numLines;
     }
 
     @Override
-    public TextPartition writePartition(OutputStream os) throws IOException {
+    public TextSplit writeSplit(OutputStream os) throws IOException {
         Writer writer = new OutputStreamWriter(os);
-        TextPartition partition = new TextPartition(lineNumber);
+        TextSplit split = new TextSplit(lineNumber);
         String line;
         for (long i = numLines; i > 0; i--) {
             if ((line = reader.readLine()) == null) {
@@ -42,7 +42,7 @@ public class TextPartitioner extends Partitioner<TextPartition> {
             lineNumber++;
         }
         writer.flush();
-        return partition;
+        return split;
     }
 
 }

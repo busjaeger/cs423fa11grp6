@@ -1,4 +1,4 @@
-package edu.illinois.cs.mr.te;
+package edu.illinois.cs.mr.util;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

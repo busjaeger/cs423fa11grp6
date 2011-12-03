@@ -6,20 +6,20 @@ import java.util.Properties;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 
-public class TextInputFormat extends InputFormat<Long, String, TextPartition> {
+public class TextInputFormat extends InputFormat<Long, String, TextSplit> {
 
-    private static final String LPP = "text.input.format.lines.per.partition";
+    private static final String LPP = "text.input.format.lines.per.split";
     private static final String LPP_DEFAULT = "10000";
 
     @Override
-    public TextPartitioner createPartitioner(InputStream is, Properties properties) {
-        long linesPerPartition = Long.parseLong(properties.getProperty(LPP, LPP_DEFAULT));
-        return new TextPartitioner(is, linesPerPartition);
+    public TextSplitter createSplitter(InputStream is, Properties properties) {
+        long linesPerSplit = Long.parseLong(properties.getProperty(LPP, LPP_DEFAULT));
+        return new TextSplitter(is, linesPerSplit);
     }
 
     @Override
-    public RecordReader<Long, String> createRecordReader(TextPartition partition, InputStream is) {
-        long firstLineNumber = ((TextPartition)partition).getFirstLineNumber();
+    public RecordReader<Long, String> createRecordReader(TextSplit split, InputStream is) {
+        long firstLineNumber = ((TextSplit)split).getFirstLineNumber();
         return new LineRecordReader(is, firstLineNumber);
     }
 

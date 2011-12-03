@@ -61,6 +61,14 @@ public final class FileUtil {
         return new FileOutputStream(file);
     }
 
+    /**
+     * Ensures a directory exists at the given location. Throws an IOException
+     * if a file exists at the given location or if no directory exists and it
+     * could not be created.
+     * 
+     * @param dir
+     * @throws IOException
+     */
     public static void ensureDirExists(File dir) throws IOException {
         if (dir.isDirectory())
             return;
@@ -85,4 +93,23 @@ public final class FileUtil {
             os.write(buf, 0, read);
     }
 
+    /**
+     * deletes the given file or directory.
+     * 
+     * @param file
+     * @return true if the file or folder could be fully deleted, false
+     *         otherwise.
+     */
+    public static boolean deleteRecursive(File file) {
+        if (file.isFile()) {
+            return file.delete();
+        } else {
+            boolean deleted = false;
+            String[] children = file.list();
+            if (children != null)
+                for (String child : children)
+                    deleted &= deleteRecursive(new File(file, child));
+            return deleted ? file.delete() : deleted;
+        }
+    }
 }

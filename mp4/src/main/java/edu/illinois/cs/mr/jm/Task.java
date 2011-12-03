@@ -9,7 +9,7 @@ import edu.illinois.cs.mr.util.ID;
 import edu.illinois.cs.mr.util.Status;
 
 /**
- * A Task is an independent partition of a Job that can be scheduled on nodes on
+ * A Task is an independent split of a Job that can be scheduled on nodes on
  * the Cluster. thread safe
  * 
  * @author benjamin

@@ -1,6 +1,6 @@
 package edu.illinois.cs.mr.te;
 
-import edu.illinois.cs.mapreduce.api.Partition;
+import edu.illinois.cs.mapreduce.api.Split;
 import edu.illinois.cs.mr.NodeID;
 import edu.illinois.cs.mr.fs.Path;
 import edu.illinois.cs.mr.jm.JobDescriptor;
@@ -10,7 +10,7 @@ public class TaskExecutorMapTask extends TaskExecutorTask {
 
     private static final long serialVersionUID = -2891035001799074650L;
 
-    private final Partition partition;
+    private final Split split;
     private final Path inputPath;
 
     public TaskExecutorMapTask(AttemptID id,
@@ -18,10 +18,10 @@ public class TaskExecutorMapTask extends TaskExecutorTask {
                                JobDescriptor descriptor,
                                Path outputPath,
                                NodeID targetNodeID,
-                               Partition partition,
+                               Split split,
                                Path inputPath) {
         super(id, jarPath, descriptor, outputPath, targetNodeID);
-        this.partition = partition;
+        this.split = split;
         this.inputPath = inputPath;
     }
 
@@ -30,8 +30,8 @@ public class TaskExecutorMapTask extends TaskExecutorTask {
         return true;
     }
 
-    public Partition getPartition() {
-        return partition;
+    public Split getSplit() {
+        return split;
     }
 
     public Path getInputPath() {
