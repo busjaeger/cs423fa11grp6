@@ -153,24 +153,34 @@ public class TaskExecutor implements TaskExecutorService {
             execution = executions.get(id);
         }
         if (execution != null) {
-            TaskExecutorTask task = execution.getTask();
-            if (task.isDone())
-                return true;
             Future<?> future = execution.getFuture();
             if (!future.isDone())
                 future.cancel(true);
+            TaskExecutorTask task = execution.getTask();
+            synchronized (task) {
+                switch (task.getState()) {
+                    case CREATED:
+                    case WAITING:
+                        task.setState(State.CANCELED);
+                        return true;
+                    case SUCCEEDED:
+                    case FAILED:
+                    case CANCELED:
+                        return true;
+                    case RUNNING:
+                        break;
+                }
+            }
+            // cancel running task
             Semaphore completion = execution.getCompletion();
             try {
-                if (completion.tryAcquire(timeout, unit))
+                if (completion.tryAcquire(timeout, unit) && task.isDone())
                     return true;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            if (task.isDone())
-                return true;
-            return false;
         }
-        return true;
+        return false;
     }
 
     @Override

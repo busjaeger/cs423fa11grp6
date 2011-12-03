@@ -130,7 +130,7 @@ public class LoadBalancer implements LoadBalancerService {
 
             JobManager jobManager = node.getJobManager();
             Iterable<JobStatus> jobs = jobManager.getJobStatuses();
-            AttemptStatus attempt = selectionPolicy.selectAttempt(source, jobs);
+            AttemptStatus attempt = selectionPolicy.selectAttempt(source, target, jobs);
             if (attempt == null) {
                 System.out.println("No suitable task found to transfer from " + source + " to " + target);
                 return;
@@ -157,13 +157,14 @@ public class LoadBalancer implements LoadBalancerService {
                     nodeStatus.setActivateThreadCount(taskExecutor.getNumActiveThreads());
                     snapshot = nodeStatus.toImmutableStatus();
                 }
+                System.out.println(snapshot);
 
                 for (NodeID nodeID : node.getNodeIds()) {
                     LoadBalancerService loadBalancer = node.getLoadBalancerService(nodeID);
                     try {
                         loadBalancer.updateStatus(snapshot);
                     } catch (ConnectException e) {
-                        System.out.println("cannot reach node " + nodeID + " for status update");
+                        System.out.println("Node " + nodeID + " unreachable");
                     }
                 }
             } catch (Throwable t) {

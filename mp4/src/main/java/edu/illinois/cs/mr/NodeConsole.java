@@ -177,18 +177,18 @@ public class NodeConsole {
             // we may not know each event, due to our heart beat frequency
             // neither known
             if (waiting == -1 && running == -1) {
-                System.out.println(prefix + "Waiting time: [" + 0 + "-" + total + "]");
-                System.out.println(prefix + "Running time: [" + 0 + "-" + total + "]");
+                System.out.println(prefix + "Waiting time: n/a");
+                System.out.println(prefix + "Running time: n/a");
             }
             // only running time known
             else if (waiting == -1) {
-                System.out.println(prefix + "Waiting time: [" + 0 + "-" + (running - created) + "]");
+                System.out.println(prefix + "Waiting time: n/a");
                 System.out.println(prefix + "Running time: " + (done - running));
             }
             // only queue time known
             else if (running == -1) {
-                System.out.println(prefix + "Waiting time: [" + 0 + "-" + (done - waiting) + "]");
-                System.out.println(prefix + "Running time: [" + 0 + "-" + (done - waiting) + "]");
+                System.out.println(prefix + "Waiting time: n/a");
+                System.out.println(prefix + "Running time: n/a");
             }
             // both known
             else {

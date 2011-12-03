@@ -6,6 +6,6 @@ import edu.illinois.cs.mr.jm.JobStatus;
 
 public interface SelectionPolicy {
 
-    public abstract AttemptStatus selectAttempt(NodeID source, Iterable<JobStatus> jobs);
+    public abstract AttemptStatus selectAttempt(NodeID source, NodeID target, Iterable<JobStatus> jobs);
 
 }
