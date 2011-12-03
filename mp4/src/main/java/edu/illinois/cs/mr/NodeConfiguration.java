@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
-import edu.illinois.cs.mapreduce.spi.lib.FirstWaitingSelectionPolicy;
+import edu.illinois.cs.mapreduce.spi.lib.WaitingTaskSelectionPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.IdleTransferPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.RoundRobinNodeSelectionPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.ScoreBasedLocationPolicy;
@@ -55,7 +55,7 @@ public class NodeConfiguration {
         String lbLocationPolicyClass =
             props.getProperty("lb.location.policy", ScoreBasedLocationPolicy.class.getName());
         String lbSelectionPolicyClass =
-            props.getProperty("lb.selection.policy", FirstWaitingSelectionPolicy.class.getName());
+            props.getProperty("lb.selection.policy", WaitingTaskSelectionPolicy.class.getName());
         int lbStatusUpdateInterval = toPositiveInt(props.getProperty("lb.status.update.interval", "5000"));
 
         return new NodeConfiguration(nodeId, port, nodeMap, lbBootstrapPolicyClass, lbTransferPolicyClass,

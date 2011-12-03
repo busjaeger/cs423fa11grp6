@@ -42,4 +42,18 @@ public class NodeStatusSnapshot extends ImmutableStatus<NodeID> {
         return activateThreadCount;
     }
 
+    @Override
+    public String toString() {
+        return "NodeStatusSnapshot [cpuUtilization=" + cpuUtilization
+            + ", queueLength="
+            + queueLength
+            + ", throttle="
+            + throttle
+            + ", threadCount="
+            + threadCount
+            + ", activateThreadCount="
+            + activateThreadCount
+            + "]";
+    }
+
 }
