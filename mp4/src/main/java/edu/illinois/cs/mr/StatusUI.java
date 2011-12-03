@@ -27,13 +27,15 @@ import edu.illinois.cs.mr.jm.JobID;
 import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.jm.Phase;
 import edu.illinois.cs.mr.jm.TaskStatus;
+import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
 
 public class StatusUI extends JFrame implements TreeSelectionListener {
 
     private static final long serialVersionUID = 6732880434775381175L;
     
-    private JLabel treeLabel, labelID, labelState, labelDetail, labelMessage;
+    private JLabel treeLabel, labelID, labelState, labelDetail, labelMessage, 
+                    labelTotal, labelWaiting, labelRunning;
     private JTree tree;
     private DefaultMutableTreeNode root;
     private int nodeId;
@@ -110,6 +112,46 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         }
     }
     
+    private String GetTotalTime(ImmutableStatus<?> status) {
+        String ret = "n/a";
+        if (status.isDone()) {
+            long created = status.getCreatedTime();
+            long done = status.getDoneTime();
+            long total = done - created;
+            ret = String.valueOf(total);
+        }
+        return ret;
+    }
+    
+    private String GetWaitTime(ImmutableStatus<?> status) {
+        String ret = "n/a";
+        if (status.isDone()) {
+            long waiting = status.getBeginWaitingTime();
+            long running = status.getBeginRunningTime();
+
+            // we may not know each event, due to our heart beat frequency
+            // neither known
+            if (waiting != -1 && running != -1) {
+                ret = String.valueOf(running - waiting);
+            }
+        }
+        return ret;
+    }
+    
+    private String GetRunTime(ImmutableStatus<?> status) {
+        String ret = "n/a";
+        if (status.isDone()) {
+            long running = status.getBeginRunningTime();
+            long done = status.getDoneTime();
+
+            // running time known
+            if (running != -1) {
+                ret = String.valueOf(done - running);
+            }
+        }
+        return ret;
+    }
+    
     private void DrawSelectedData(DefaultMutableTreeNode node) {
         String title = (String) node.getUserObject();
         
@@ -126,7 +168,20 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                 labelState.setVisible(true);
                 labelDetail.setText("Phase: \t" + js.getPhase());
                 labelDetail.setVisible(true);
+                if(js.isDone()) {
+                    labelTotal.setText("Total Time: \t" + GetTotalTime(js));
+                    labelTotal.setVisible(true);
+                    labelWaiting.setText("Waiting Time: \t" + GetWaitTime(js));
+                    labelWaiting.setVisible(true);
+                    labelRunning.setText("Running Time: \t" + GetRunTime(js));
+                    labelRunning.setVisible(true);
+                } else {
+                    labelTotal.setVisible(false);
+                    labelWaiting.setVisible(false);
+                    labelRunning.setVisible(false);
+                }
                 labelMessage.setVisible(false);
+                
             }
             else if(type.startsWith("Task")) {
                 DefaultMutableTreeNode jobnode = (DefaultMutableTreeNode)node.getParent();
@@ -138,6 +193,18 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                         labelState.setVisible(true);
                         labelMessage.setVisible(false);
                         labelDetail.setVisible(false);
+                        if(task.isDone()) {
+                            labelTotal.setText("Total Time: \t" + GetTotalTime(task));
+                            labelTotal.setVisible(true);
+                            labelWaiting.setText("Waiting Time: \t" + GetWaitTime(task));
+                            labelWaiting.setVisible(true);
+                            labelRunning.setText("Running Time: \t" + GetRunTime(task));
+                            labelRunning.setVisible(true);
+                        } else {
+                            labelTotal.setVisible(false);
+                            labelWaiting.setVisible(false);
+                            labelRunning.setVisible(false);
+                        }
                         break;
                     }    
                 }
@@ -159,6 +226,18 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
                                 if (attempt.getMessage() != null) {
                                     labelMessage.setText("Message: \t" + attempt.getMessage());
                                     labelMessage.setVisible(true);
+                                }
+                                if(attempt.isDone()) {
+                                    labelTotal.setText("Total Time: \t" + GetTotalTime(attempt));
+                                    labelTotal.setVisible(true);
+                                    labelWaiting.setText("Waiting Time: \t" + GetWaitTime(attempt));
+                                    labelWaiting.setVisible(true);
+                                    labelRunning.setText("Running Time: \t" + GetRunTime(attempt));
+                                    labelRunning.setVisible(true);
+                                } else {
+                                    labelTotal.setVisible(false);
+                                    labelWaiting.setVisible(false);
+                                    labelRunning.setVisible(false);
                                 }
                                 return;
                             }
@@ -272,6 +351,24 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         labelMessage.setVisible(false);
         pane.add(labelMessage);
         
+        labelTotal = new JLabel("Total Time: \t");
+        labelTotal.setSize(300, 20);
+        labelTotal.setLocation(350, 200);
+        labelTotal.setVisible(false);
+        pane.add(labelTotal);
+        
+        labelWaiting = new JLabel("Waiting Time: \t");
+        labelWaiting.setSize(300, 20);
+        labelWaiting.setLocation(350, 240);
+        labelWaiting.setVisible(false);
+        pane.add(labelWaiting);
+        
+        labelRunning = new JLabel("Running Time: \t");
+        labelRunning.setSize(300, 20);
+        labelRunning.setLocation(350, 280);
+        labelRunning.setVisible(false);
+        pane.add(labelRunning);
+        
         this.add(pane);
     }
         
@@ -280,6 +377,9 @@ public class StatusUI extends JFrame implements TreeSelectionListener {
         labelState.setVisible(false);
         labelDetail.setVisible(false);
         labelMessage.setVisible(false);
+        labelTotal.setVisible(false);
+        labelWaiting.setVisible(false);
+        labelRunning.setVisible(false);
     }
   
     /**
