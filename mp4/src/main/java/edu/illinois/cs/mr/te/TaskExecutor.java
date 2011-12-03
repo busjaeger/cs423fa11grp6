@@ -65,8 +65,7 @@ public class TaskExecutor implements TaskExecutorService {
     private double throttle;
     private long[] taskRuntimes;
     private int index;
-    private int capacity;
-    private long averageRuntime;
+    private int currentCapacity;
 
     public TaskExecutor(NodeConfiguration config) {
         this.config = config;
@@ -76,10 +75,9 @@ public class TaskExecutor implements TaskExecutorService {
         this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
         this.executions = new TreeMap<AttemptID, TaskExecution>();
         this.timer = new Timer();
-        this.capacity = 10;
         this.index = 0;
-        this.taskRuntimes = new long[capacity];
-        this.averageRuntime = 0;
+        this.taskRuntimes = new long[10];
+        this.currentCapacity = 0;
     }
 
     @Override
@@ -115,24 +113,27 @@ public class TaskExecutor implements TaskExecutorService {
         return executorService.getQueue().size();
     }
 
-    private void updateAverage() {
+    private long updateAverage() {
     	long average = 0;
     	for (long taskRuntime : this.taskRuntimes) {
     		average += taskRuntime;
     	}
-    	this.averageRuntime = average / capacity;
+    	if (currentCapacity < this.taskRuntimes.length) {
+    		return (long)((double)average / (double)this.currentCapacity);
+    	}
+    	return (long)((double)average / (double)this.taskRuntimes.length);
     }
     
     public synchronized long done(TaskExecutorTask task) {
+    	this.currentCapacity++;
     	long runtime = task.getDoneTime() - task.getBeginRunningTime();
     	taskRuntimes[index] = runtime;
-    	int temp = (index++) % capacity;
-    	this.index = temp;
-    	this.updateAverage();
+    	this.index = (index++) % this.taskRuntimes.length;
     	if(this.throttle == 0) {
     		return 0;
     	}
-    	return (this.averageRuntime / ((long)this.throttle / 100)) - this.averageRuntime;    	
+    	Long average = new Long(this.updateAverage());
+    	return (long) ((average.doubleValue() / (this.throttle / 100.0)) - average.doubleValue());    	
     }
     
     @Override

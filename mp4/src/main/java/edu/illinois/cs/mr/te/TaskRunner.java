@@ -79,9 +79,7 @@ class TaskRunner implements Runnable {
             completion.release();
           	try {
           		Thread.sleep(this.parent.done(task));
-          	} catch (Exception e) {
-          		e.printStackTrace();
-          	}
+          	} catch (InterruptedException e) {}
         }
     }
 
