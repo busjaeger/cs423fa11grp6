@@ -41,7 +41,6 @@ import edu.illinois.cs.mr.jm.Phase;
 import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
-import edu.illinois.cs.mr.util.Status;
 import edu.illinois.cs.mr.util.Status.State;
 
 public class NodeUI extends JFrame implements TreeSelectionListener {
@@ -383,7 +382,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         this.setResizable(false);
         
         try {
-            BufferedImage icon = ImageIO.read(this.getClass().getResource("icon.png"));
+            BufferedImage icon = ImageIO.read(this.getClass().getResource("/icon.png"));
             this.setIconImage(icon);
         } catch (Exception e) { }
     }
@@ -622,8 +621,8 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         
         
         bWrite = new JButton("Save Job Output...");
-        bWrite.setSize(140, 30);
-        bWrite.setLocation(500, 80);
+        bWrite.setSize(170, 30);
+        bWrite.setLocation(600, 75);
         bWrite.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 final JFileChooser fc = new JFileChooser();
