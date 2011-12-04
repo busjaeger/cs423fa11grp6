@@ -173,19 +173,20 @@ public class JobManager implements JobManagerService, NodeListener {
             final Splitter<?> splitter = inputFormat.createSplitter(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
             int num = 0;
-            MapTask previous = null;
-            Attempt previousAttempt = null;
             while (!splitter.isEOF()) {
                 // 1. ask load balancer which node to place task on
                 NodeID targetNodeId = node.getLoadBalancer().selectNode();
 
-                // 2. create task ID for the split
+                // 2. create and regsiter task
                 TaskID taskId = new TaskID(job.getId(), num, true);
                 Path inputPath = job.getDir().append(taskId + "-input");
+                MapTask task = new MapTask(taskId, inputPath);
+                job.addTask(task);
 
                 // 3. write split to node's file system
                 final FileSystemService fs = node.getFileSystemService(targetNodeId);
                 Split split = writeSplit(splitter, inputPath, fs);
+                task.setSplit(split);
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(targetNodeId)) {
@@ -198,26 +199,16 @@ public class JobManager implements JobManagerService, NodeListener {
                     nodesWithJar.add(targetNodeId);
                 }
 
-                // 5. create and register task
-                MapTask task = new MapTask(taskId, split, inputPath);
-                job.addTask(task);
-
                 // 6. create and register task attempt
                 AttemptID attemptID = task.nextAttemptID();
                 Path outputPath = job.getDir().append(attemptID.toQualifiedString(1) + "-output");
                 Attempt attempt = new Attempt(attemptID, targetNodeId, outputPath);
                 task.addAttempt(attempt);
 
-                // 7. submit previous task
-                if (previous != null)
-                    submitMapTaskAttempt(job, previous, previousAttempt);
-                previous = task;
-                previousAttempt = attempt;
+                // 7. submit task
+                submitMapTaskAttempt(job, task, attempt);
                 num++;
             }
-            // submit last task attempt
-            if (previous != null)
-                submitMapTaskAttempt(job, previous, previousAttempt);
         } finally {
             is.close();
         }
