@@ -137,10 +137,8 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
             JobManager jobManager = node.getJobManager();
             Iterable<JobStatus> jobs = jobManager.getJobStatuses();
             AttemptStatus attempt = selectionPolicy.selectAttempt(source, target, jobs);
-            if (attempt == null) {
-                System.out.println("No suitable task found to transfer from " + source + " to " + target);
+            if (attempt == null)
                 return;
-            }
             jobManager.migrateTask(target, attempt);
         } catch (Throwable e) {
             e.printStackTrace();
