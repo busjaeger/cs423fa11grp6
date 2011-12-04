@@ -98,14 +98,20 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                         for (Enumeration e = jobnode.children(); e.hasMoreElements() ;) {
                             phasenode = (DefaultMutableTreeNode) e.nextElement();
                             String phz = ((String)phasenode.getUserObject()).split(" ")[1];
-                            if(phz.equals(phase.name())) {
+                            String phasename = "";
+                            try {
+                                phasename = phase.name();
+                            } catch(Exception err) { }
+                            if(phz.equals(phasename)) {
                                 phasefound = true;
                                 break;
                             }
                         }
                         if(!phasefound) {
-                            phasenode = new DefaultMutableTreeNode("Phase " + phase.name());
-                            treeModel.insertNodeInto(phasenode, jobnode, jobnode.getChildCount());
+                            try {
+                                phasenode = new DefaultMutableTreeNode("Phase " + phase.name());
+                                treeModel.insertNodeInto(phasenode, jobnode, jobnode.getChildCount());
+                            } catch(Exception excp) { }
                         }
                         
                         for (TaskStatus task : job.getTaskStatuses(phase)) {
@@ -242,7 +248,11 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 labelMessage.setVisible(false);
                 labelDetail.setVisible(false);
                 bWrite.setVisible(false);
-                if(phase.isDone()) {
+                boolean phasedone = false;
+                try {
+                    phasedone = phase.isDone();
+                } catch (Exception e) { }
+                if(phasedone) {
                     labelTotal.setText("Total Time: \t" + GetTotalTime(phase));
                     labelTotal.setVisible(true);
                     labelWaiting.setText("Waiting Time: \t" + GetWaitTime(phase));
