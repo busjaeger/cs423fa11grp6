@@ -506,6 +506,10 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
             public void actionPerformed(ActionEvent e) {
                 try {
                     services.setThrottle(throttleValue);
+                    JOptionPane.showMessageDialog((Component) e.getSource(), 
+                                  "Throttle set to " + (int)throttleValue + ".",
+                                  "Throttle Set",
+                                  JOptionPane.INFORMATION_MESSAGE);
                 } catch(IOException ioe) { }
             }
           });
