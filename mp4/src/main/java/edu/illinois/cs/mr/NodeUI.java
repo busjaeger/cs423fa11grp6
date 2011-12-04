@@ -230,9 +230,12 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 ImmutableStatus<JobID> phase = js.getPhaseStatus(Phase.valueOf(phaseid));
                 try {
+                    if(phase.getState()==null)
+                        labelState.setText("State: \tNot Started");
+                    else
                     labelState.setText("State: \t" + phase.getState());
                 } catch(Exception e) {
-                    labelState.setText("State: \tWaiting");
+                    labelState.setText("State: \tNot Started");
                 }
                 labelState.setVisible(true);
                 labelMessage.setVisible(false);
