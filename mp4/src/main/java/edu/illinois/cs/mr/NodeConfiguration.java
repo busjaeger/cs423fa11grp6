@@ -16,17 +16,42 @@ import edu.illinois.cs.mapreduce.spi.lib.RoundRobinNodeSelectionPolicy;
 import edu.illinois.cs.mapreduce.spi.lib.ScoreBasedLocationPolicy;
 import edu.illinois.cs.mr.jm.JobManager;
 
+/**
+ * Representation of the node configuration properties file
+ * 
+ * @author benjamin
+ */
 public class NodeConfiguration {
 
+    /**
+     * Loads the node configuration from the default configuration file
+     * 
+     * @return
+     * @throws IOException
+     */
     public static NodeConfiguration load() throws IOException {
         URL url = JobManager.class.getClassLoader().getResource("node-default.properties");
         return load(url);
     }
 
+    /**
+     * Loads the node configuration from the specified file
+     * 
+     * @param file
+     * @return
+     * @throws IOException
+     */
     public static NodeConfiguration load(File file) throws IOException {
         return load(file.toURI().toURL());
     }
 
+    /**
+     * Loads the node configuration from the given URL
+     * 
+     * @param url
+     * @return
+     * @throws IOException
+     */
     public static NodeConfiguration load(URL url) throws IOException {
         Properties config = new Properties();
         InputStream is = url.openStream();
@@ -38,6 +63,12 @@ public class NodeConfiguration {
         return load(config);
     }
 
+    /**
+     * Loads the node configuration from the given properties
+     * 
+     * @param props
+     * @return
+     */
     public static NodeConfiguration load(Properties props) {
         NodeID nodeId = toNodeID(props.getProperty("node.id", "1"));
         int port = toPort(props.getProperty("node.port", "60001"));
@@ -60,7 +91,7 @@ public class NodeConfiguration {
 
         return new NodeConfiguration(nodeId, port, nodeMap, lbBootstrapPolicyClass, lbTransferPolicyClass,
                                      lbLocationPolicyClass, lbSelectionPolicyClass, lbStatusUpdateInterval,
-                                     teNumThreads, teThrottle, teStatusUpdateInterval, fsRootDir);
+                                     teNumThreads, teThrottle, teStatusUpdateInterval, fsRootDir, props);
     }
 
     private static int toPort(String value) {
@@ -99,7 +130,7 @@ public class NodeConfiguration {
         public final String host;
         public final int port;
 
-        public Endpoint(String host, int port) {
+        Endpoint(String host, int port) {
             this.host = host;
             this.port = port;
         }
@@ -124,6 +155,8 @@ public class NodeConfiguration {
     // file system configuration
     public final File fsRootDir;
 
+    public final Properties properties;
+
     public NodeConfiguration(NodeID nodeId,
                              int port,
                              Map<NodeID, Endpoint> nodeMap,
@@ -135,7 +168,8 @@ public class NodeConfiguration {
                              int teNumThreads,
                              double teThrottle,
                              int teStatusUpdateInterval,
-                             File fsRootDir) {
+                             File fsRootDir,
+                             Properties properties) {
         this.nodeId = nodeId;
         this.port = port;
         this.nodeMap = nodeMap;
@@ -148,6 +182,7 @@ public class NodeConfiguration {
         this.teThrottle = teThrottle;
         this.teStatusUpdateInterval = teStatusUpdateInterval;
         this.fsRootDir = fsRootDir;
+        this.properties = properties;
     }
 
 }

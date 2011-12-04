@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -61,6 +62,7 @@ public class Node implements NodeService {
         node.start();
     }
 
+    /** holds nodes by configuration within this JVM */
     private static final Map<String, Node> instances = new HashMap<String, Node>();
 
     public static synchronized Node getInstance(String cfgPath) throws IOException {
@@ -103,6 +105,7 @@ public class Node implements NodeService {
     private final TaskExecutor taskExecutor;
     private final FileSystem fileSystem;
     private final ExecutorService executorService;
+    private final ScheduledExecutorService scheduledExecutorService;
     private final List<NodeID> nodeIds;
     private final Map<NodeID, NodeService> nodeMap;
     private final RPCServer server;
@@ -125,9 +128,15 @@ public class Node implements NodeService {
         ids.add(config.nodeId);
         this.nodeIds = Collections.unmodifiableList(ids);
         this.executorService = Executors.newCachedThreadPool();
+        this.scheduledExecutorService = Executors.newScheduledThreadPool(2);
         this.server = RPC.newServer(executorService, config.port, NodeService.class, this);
     }
 
+    /**
+     * Starts this node
+     *
+     * @throws IOException if an error occurred during startup
+     */
     public synchronized void start() throws IOException {
         if (started)
             return;
@@ -151,12 +160,16 @@ public class Node implements NodeService {
         System.out.println("node " + config.nodeId + " stopped");
     }
 
+    /**
+     * Stops this node
+     */
     @Override
     public synchronized void stop() {
         if (started) {
             loadBalancer.stop();
             jobManager.stop();
             taskExecutor.stop();
+            scheduledExecutorService.shutdown();
             server.stop();
             executorService.shutdown();
             started = false;
@@ -174,6 +187,10 @@ public class Node implements NodeService {
 
     public ExecutorService getExecutorService() {
         return executorService;
+    }
+
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return scheduledExecutorService;
     }
 
     public LoadBalancer getLoadBalancer() {

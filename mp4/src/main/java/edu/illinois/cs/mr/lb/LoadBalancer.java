@@ -5,9 +5,8 @@ import static edu.illinois.cs.mr.util.ReflectionUtil.newInstance;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 
 import edu.illinois.cs.mapreduce.spi.LocationPolicy;
 import edu.illinois.cs.mapreduce.spi.NodeSelectionPolicy;
@@ -26,16 +25,16 @@ import edu.illinois.cs.mr.util.CpuProfiler;
 public class LoadBalancer implements LoadBalancerService, NodeListener {
 
     private final NodeConfiguration config;
+    private Node node;
 
     private final TransferPolicy transferPolicy;
     private final NodeSelectionPolicy bootstrapPolicy;
     private final LocationPolicy locationPolicy;
     private final SelectionPolicy selectionPolicy;
-    private final Timer timer;
+
     private final CpuProfiler cpuProfiler;
-    private final Map<NodeID, NodeStatus> nodeStatuses;
     private final NodeStatus nodeStatus;
-    private Node node;
+    private final Map<NodeID, NodeStatus> nodeStatuses;
 
     // mutable state
     private volatile boolean transferring;
@@ -43,7 +42,6 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
     public LoadBalancer(NodeConfiguration config) throws IOException {
         this.config = config;
         this.nodeStatus = new NodeStatus(config.nodeId);
-        this.timer = new Timer();
         this.cpuProfiler = new CpuProfiler();
         this.transferPolicy = newInstance(config.lbTransferPolicyClass, NodeConfiguration.class, config);
         this.bootstrapPolicy = newInstance(config.lbBootstrapPolicyClass, NodeConfiguration.class, config);
@@ -55,10 +53,13 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
     @Override
     public void start(Node node) {
         this.node = node;
-        this.timer.schedule(new StatusUpdateTask(), 0, config.lbStatusUpdateInterval);
-        System.out.println("start waiting for cluster nodes to register");
+        node.getScheduledExecutorService().scheduleAtFixedRate(new StatusUpdater(),
+                                                               0,
+                                                               config.lbStatusUpdateInterval,
+                                                               TimeUnit.MILLISECONDS);
         synchronized (nodeStatuses) {
             while (nodeStatuses.size() < node.getNodeIds().size()) {
+                System.out.println("start waiting for cluster nodes to register");
                 try {
                     nodeStatuses.wait();
                 } catch (InterruptedException e) {
@@ -71,7 +72,7 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
 
     @Override
     public void stop() {
-        this.timer.cancel();
+        // no work needed
     }
 
     public NodeID selectNode() throws InterruptedException {
@@ -144,7 +145,7 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
         }
     }
 
-    private class StatusUpdateTask extends TimerTask {
+    private class StatusUpdater implements Runnable {
         @Override
         public void run() {
             try {
@@ -164,12 +165,11 @@ public class LoadBalancer implements LoadBalancerService, NodeListener {
                     try {
                         loadBalancer.updateStatus(snapshot);
                     } catch (ConnectException e) {
-                        System.out.println("Node " + nodeID + " unreachable");
+                        System.out.println("LoadBalancer.StatusUpdater: Node " + nodeID + " unreachable");
                     }
                 }
-            } catch (Throwable t) {
-                System.out.println("node " + config.nodeId + " failed to update status");
-                t.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }

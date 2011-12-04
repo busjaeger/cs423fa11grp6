@@ -7,8 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.TreeMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -55,11 +53,8 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
     }
 
     private final NodeConfiguration config;
-    private final ThreadPoolExecutor executorService;
-    private final int numThreads;
-    private final int statusUpdateInterval;
-    private final Timer timer;
     private Node node; // quasi immutable
+    private final ThreadPoolExecutor executorService;
 
     // mutable state
     private final Map<AttemptID, TaskExecution> executions;
@@ -70,12 +65,9 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
 
     public TaskExecutor(NodeConfiguration config) {
         this.config = config;
-        this.numThreads = config.teNumThreads;
         this.throttle = config.teThrottle;
-        this.statusUpdateInterval = config.teStatusUpdateInterval;
         this.executorService = (ThreadPoolExecutor)Executors.newFixedThreadPool(config.teNumThreads);
         this.executions = new TreeMap<AttemptID, TaskExecution>();
-        this.timer = new Timer();
         this.index = 0;
         this.taskRuntimes = new long[10];
         this.currentCapacity = 0;
@@ -84,12 +76,14 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
     @Override
     public void start(Node node) {
         this.node = node;
-        this.timer.schedule(new StatusUpdateTask(), 0, this.statusUpdateInterval);
+        node.getScheduledExecutorService().scheduleAtFixedRate(new StatusUpdater(),
+                                                               0,
+                                                               config.teStatusUpdateInterval,
+                                                               TimeUnit.MILLISECONDS);
     }
 
     @Override
     public void stop() {
-        this.timer.cancel();
         this.executorService.shutdown();
     }
 
@@ -103,7 +97,7 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
     }
 
     public int getNumThreads() {
-        return this.numThreads;
+        return config.teNumThreads;
     }
 
     public int getNumActiveThreads() {
@@ -115,28 +109,28 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
     }
 
     private long updateAverage() {
-    	long average = 0;
-    	for (long taskRuntime : this.taskRuntimes) {
-    		average += taskRuntime;
-    	}
-    	if (currentCapacity < this.taskRuntimes.length) {
-    		return (long)((double)average / (double)this.currentCapacity);
-    	}
-    	return (long)((double)average / (double)this.taskRuntimes.length);
+        long average = 0;
+        for (long taskRuntime : this.taskRuntimes) {
+            average += taskRuntime;
+        }
+        if (currentCapacity < this.taskRuntimes.length) {
+            return (long)((double)average / (double)this.currentCapacity);
+        }
+        return (long)((double)average / (double)this.taskRuntimes.length);
     }
-    
+
     public synchronized long done(TaskExecutorTask task) {
-    	this.currentCapacity++;
-    	long runtime = task.getDoneTime() - task.getBeginRunningTime();
-    	taskRuntimes[index] = runtime;
-    	this.index = (index++) % this.taskRuntimes.length;
-    	if(this.throttle == 0) {
-    		return 0;
-    	}
-    	Long average = new Long(this.updateAverage());
-    	return (long) ((average.doubleValue() / (this.throttle / 100.0)) - average.doubleValue());    	
+        this.currentCapacity++;
+        long runtime = task.getDoneTime() - task.getBeginRunningTime();
+        taskRuntimes[index] = runtime;
+        this.index = (index++) % this.taskRuntimes.length;
+        if (this.throttle == 0) {
+            return 0;
+        }
+        Long average = new Long(this.updateAverage());
+        return (long)((average.doubleValue() / (this.throttle / 100.0)) - average.doubleValue());
     }
-    
+
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
         Semaphore completion = new Semaphore(0);
@@ -208,7 +202,7 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         return true;
     }
 
-    private class StatusUpdateTask extends TimerTask {
+    private class StatusUpdater implements Runnable {
         @Override
         public void run() {
             try {
@@ -229,12 +223,11 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
                     try {
                         jobManager.updateStatus(statuses);
                     } catch (ConnectException e) {
-                        System.out.println("cannot reach node " + entry.getKey() + " for status update");
+                        System.out.println("TaskExecutor.StatusUpdater: Node " + entry.getKey() + " unreachable");
                     }
                 }
-            } catch (Throwable t) {
-                System.out.println("node " + config.nodeId + " failed to update status");
-                t.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
