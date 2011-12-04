@@ -145,6 +145,7 @@ public class Node implements NodeService {
         server.start();
 
         // start services
+        fileSystem.start(this);
         taskExecutor.start(this);
         jobManager.start(this);
         loadBalancer.start(this);
@@ -169,6 +170,7 @@ public class Node implements NodeService {
             loadBalancer.stop();
             jobManager.stop();
             taskExecutor.stop();
+            fileSystem.stop();
             scheduledExecutorService.shutdown();
             server.stop();
             executorService.shutdown();

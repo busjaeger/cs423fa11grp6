@@ -1,5 +1,7 @@
 package edu.illinois.cs.mr;
 
+import java.io.IOException;
+
 /**
  * Services can implement this interface to receive notifications when the node
  * is started and stopped to obtain a handle to the node and create/destroy any
@@ -14,7 +16,7 @@ public interface NodeListener {
      * 
      * @param node
      */
-    void start(Node node);
+    void start(Node node) throws IOException;
 
     /**
      * stops the node service
