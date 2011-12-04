@@ -23,6 +23,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 import javax.swing.JTree;
+import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.border.Border;
 import javax.swing.event.ChangeEvent;
@@ -581,16 +582,13 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 }
                 else {
                     try {    
-                        JobID id = services.submitJob(fJar, fInput);
-                        JOptionPane.showMessageDialog((Component) e.getSource(), 
-                                      "Job " + id.getValue() + " submitted.",
-                                      "Job Submitted", JOptionPane.INFORMATION_MESSAGE);
-                        fJar= null;
-                        fInput = null;
+                        (new JobSubmitter(fJar, fInput, services)).execute();
                         tfJar.setText("");
                         tfInput.setText("");
+                        fJar= null;
+                        fInput = null;
                     }
-                    catch(IOException ioe) {
+                    catch(Exception ioe) {
                         JOptionPane.showMessageDialog((Component) e.getSource(),
                                       "Error submitting job.", "Error", 
                                       JOptionPane.ERROR_MESSAGE);
@@ -688,5 +686,39 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 tree.setSelectionPath(null);
                 ClearData();
         }
+    }
+}
+
+class JobSubmitter extends SwingWorker<JobID, Object> {
+    
+    private JobID id;
+    private File fJar, fInput;
+    NodeService services;
+    
+    public JobSubmitter(File jar, File input, NodeService service) {
+        id = null;
+        fJar = jar;
+        fInput = input;
+        services = service;
+    }
+    
+    @Override
+    public JobID doInBackground() {
+        try {
+            id = services.submitJob(fJar, fInput);
+            JOptionPane.showMessageDialog(null, 
+                              "Job " + id.getValue() + " submitted.",
+                              "Job Submitted", JOptionPane.INFORMATION_MESSAGE);
+        } catch(Exception e) {
+            JOptionPane.showMessageDialog(null,
+                                          "Error submitting job.", "Error", 
+                                          JOptionPane.ERROR_MESSAGE);
+        }
+
+        return id;
+    }
+
+    @Override
+    protected void done() {
     }
 }
