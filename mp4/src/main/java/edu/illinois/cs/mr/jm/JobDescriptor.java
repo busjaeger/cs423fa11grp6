@@ -14,7 +14,7 @@ public class JobDescriptor implements Serializable {
 
     private static final long serialVersionUID = 2403104226863768716L;
 
-    public static JobDescriptor read(File jobFile) throws IOException {
+    public static JobDescriptor read(File jobFile, Properties nodeProps) throws IOException {
         JarFile jar = new JarFile(jobFile);
         try {
             // load job descriptor
@@ -27,7 +27,7 @@ public class JobDescriptor implements Serializable {
             String outputFormatClass = getRequiredAttribute(attrs, "OutputFormatClass");
 
             // load job properties
-            Properties properties = new Properties();
+            Properties properties = new Properties(nodeProps);
             ZipEntry entry = jar.getEntry("META-INF/job.properties");
             if (entry != null) {
                 InputStream is = jar.getInputStream(entry);

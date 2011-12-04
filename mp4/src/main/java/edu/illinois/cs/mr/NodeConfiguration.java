@@ -155,6 +155,7 @@ public class NodeConfiguration {
     // file system configuration
     public final File fsRootDir;
 
+    // properties loaded from the file system
     public final Properties properties;
 
     public NodeConfiguration(NodeID nodeId,

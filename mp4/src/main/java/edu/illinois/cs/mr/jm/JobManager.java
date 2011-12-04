@@ -117,7 +117,7 @@ public class JobManager implements JobManagerService, NodeListener {
     @Override
     public JobID submitJob(final File jarFile, final File inputFile) throws IOException {
         // 1. create job
-        JobDescriptor descriptor = JobDescriptor.read(jarFile);
+        JobDescriptor descriptor = JobDescriptor.read(jarFile, config.properties);
         JobID jobId = new JobID(config.nodeId, counter.incrementAndGet());
         final Job job = new Job(jobId, jarFile.getName(), descriptor);
         synchronized (jobs) {
