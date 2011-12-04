@@ -41,6 +41,8 @@ import edu.illinois.cs.mr.jm.Phase;
 import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
+import edu.illinois.cs.mr.util.Status;
+import edu.illinois.cs.mr.util.Status.State;
 
 public class NodeUI extends JFrame implements TreeSelectionListener {
 
@@ -49,13 +51,15 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
     private JLabel treeLabel, labelID, labelState, labelDetail, labelMessage, 
                     labelTotal, labelWaiting, labelRunning;
     private JTree tree;
+    private JButton bWrite;
     private DefaultMutableTreeNode root;
     private int nodeId;
     private DefaultTreeModel treeModel;
     private JTextField tfInput, tfJar;
     static NodeService services;
     private double throttleValue;
-    private File fJar, fInput;
+    private File fJar, fInput, fOutput;
+    private JobID selectedJobID;
     
     @SuppressWarnings("rawtypes")
     private void BuildTree() {
@@ -196,12 +200,16 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         
         try {
             if(type.startsWith("Job")) {
+                selectedJobID = JobID.fromQualifiedString(nodeId + "-" + id);
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + id));
                 labelState.setText("State: \t" + js.getState());
                 labelState.setVisible(true);
                 labelDetail.setText("Phase: \t" + js.getPhase());
                 labelDetail.setVisible(true);
                 if(js.isDone()) {
+                    if(js.getState() == State.SUCCEEDED) {
+                        bWrite.setVisible(true); 
+                    }
                     labelTotal.setText("Total Time: \t" + GetTotalTime(js));
                     labelTotal.setVisible(true);
                     labelWaiting.setText("Waiting Time: \t" + GetWaitTime(js));
@@ -212,9 +220,9 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                     labelTotal.setVisible(false);
                     labelWaiting.setVisible(false);
                     labelRunning.setVisible(false);
+                    bWrite.setVisible(false);
                 }
                 labelMessage.setVisible(false);
-                
             }
             else if(type.startsWith("Phase")) {
                 DefaultMutableTreeNode jobnode = (DefaultMutableTreeNode)node.getParent();
@@ -227,6 +235,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 labelState.setVisible(true);
                 labelMessage.setVisible(false);
                 labelDetail.setVisible(false);
+                bWrite.setVisible(false);
                 if(phase.isDone()) {
                     labelTotal.setText("Total Time: \t" + GetTotalTime(phase));
                     labelTotal.setVisible(true);
@@ -252,6 +261,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                         labelState.setVisible(true);
                         labelMessage.setVisible(false);
                         labelDetail.setVisible(false);
+                        bWrite.setVisible(false);
                         if(task.isDone()) {
                             labelTotal.setText("Total Time: \t" + GetTotalTime(task));
                             labelTotal.setVisible(true);
@@ -276,6 +286,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 DefaultMutableTreeNode jobnode = (DefaultMutableTreeNode)phasenode.getParent();
                 String jobid = ((String)jobnode.getUserObject()).split(" ")[1];
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
+                bWrite.setVisible(false);
                 for (TaskStatus task : js.getTaskStatuses(Phase.valueOf(phaseid))) {
                     if(task.getId().getValue() == Integer.parseInt(taskid)) {
                         for (AttemptStatus attempt : task.getAttemptStatuses()) {
@@ -343,6 +354,8 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
     public NodeUI() {
         fJar = null;
         fInput = null;
+        fOutput = null;
+        selectedJobID = null;
         SetupFrame();
         SetupGUIElements();
         BuildTree();
@@ -380,7 +393,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         
         nodeId = services.getId().getValue();
         
-        treeLabel = new JLabel("Jobs Created on Node" + nodeId + ":");
+        treeLabel = new JLabel("Jobs Created on Node " + nodeId + ":");
         treeLabel.setLocation(12, 10);
         treeLabel.setSize(300,20);
         pane.add(treeLabel);
@@ -405,7 +418,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         pane.add(labelID);
         
         labelState = new JLabel("State: \t");
-        labelState.setSize(300, 20);
+        labelState.setSize(200, 20);
         labelState.setLocation(350, 80);
         labelState.setVisible(false);
         pane.add(labelState);
@@ -493,49 +506,49 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         panelSubmit.setSize(240, 210);
         panelSubmit.setLocation(170, 20);
                 
-                JLabel labelJar = new JLabel("Job Jar:");
-                labelJar.setSize(150,20);
-                labelJar.setLocation(10,20);
-                labelJar.setVisible(true);
-                panelSubmit.add(labelJar);
-                
-                tfJar = new JTextField();
-                tfJar.setEditable(false);
-                tfJar.setSize(180,25);
-                tfJar.setLocation(10,50);
-                tfJar.setVisible(true);
-                panelSubmit.add(tfJar);
-                
-                JButton bJar = new JButton("...");
+        JLabel labelJar = new JLabel("Job Jar:");
+        labelJar.setSize(150,20);
+        labelJar.setLocation(10,20);
+        labelJar.setVisible(true);
+        panelSubmit.add(labelJar);
+        
+        tfJar = new JTextField();
+        tfJar.setEditable(false);
+        tfJar.setSize(180,25);
+        tfJar.setLocation(10,50);
+        tfJar.setVisible(true);
+        panelSubmit.add(tfJar);
+        
+        JButton bJar = new JButton("...");
         bJar.setSize(35, 25);
         bJar.setLocation(195, 50);
         bJar.addActionListener(new ActionListener() {
-                        public void actionPerformed(ActionEvent e) {
-                                final JFileChooser fc = new JFileChooser();
-                                int returnVal = fc.showOpenDialog((Component) e.getSource());
-                                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                                        fJar = fc.getSelectedFile();
-                                        tfJar.setText(fJar.getName());
-                                }
-                        }
-                });
+            public void actionPerformed(ActionEvent e) {
+                final JFileChooser fc = new JFileChooser();
+                int returnVal = fc.showOpenDialog((Component) e.getSource());
+                if (returnVal == JFileChooser.APPROVE_OPTION) {
+                    fJar = fc.getSelectedFile();
+                    tfJar.setText(fJar.getName());
+                }
+            }
+        });
         bJar.setVisible(true);
         panelSubmit.add(bJar);
                 
-                JLabel labelInput = new JLabel("Input File:");
-                labelInput.setSize(150,20);
-                labelInput.setLocation(10,85);
-                labelInput.setVisible(true);
-                panelSubmit.add(labelInput);
-                
-                tfInput = new JTextField();
-                tfInput.setEditable(false);
-                tfInput.setSize(180,25);
-                tfInput.setLocation(10,115);
-                tfInput.setVisible(true);
-                panelSubmit.add(tfInput);
-                
-                JButton bInput = new JButton("...");
+        JLabel labelInput = new JLabel("Input File:");
+        labelInput.setSize(150,20);
+        labelInput.setLocation(10,85);
+        labelInput.setVisible(true);
+        panelSubmit.add(labelInput);
+        
+        tfInput = new JTextField();
+        tfInput.setEditable(false);
+        tfInput.setSize(180,25);
+        tfInput.setLocation(10,115);
+        tfInput.setVisible(true);
+        panelSubmit.add(tfInput);
+        
+        JButton bInput = new JButton("...");
         bInput.setSize(35, 25);
         bInput.setLocation(195, 115);
         bInput.addActionListener(new ActionListener() {
@@ -573,7 +586,9 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                         tfInput.setText("");
                     }
                     catch(IOException ioe) {
-                        JOptionPane.showMessageDialog((Component) e.getSource(), "Error submitting job.", "Error", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog((Component) e.getSource(),
+                                      "Error submitting job.", "Error", 
+                                      JOptionPane.ERROR_MESSAGE);
                     }
                 }
             }
@@ -605,6 +620,34 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         panelNode.setVisible(true);
         pane.add(panelNode);
         
+        
+        bWrite = new JButton("Save Job Output...");
+        bWrite.setSize(140, 30);
+        bWrite.setLocation(500, 80);
+        bWrite.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                final JFileChooser fc = new JFileChooser();
+                int returnVal = fc.showSaveDialog((Component) e.getSource());
+                if (returnVal == JFileChooser.APPROVE_OPTION) {
+                    fOutput = fc.getSelectedFile();
+                    boolean ret = false;
+                    try {
+                        ret = services.writeOutput(selectedJobID, fOutput);
+                    } catch(IOException ioe) { }
+                    if(!ret)
+                        JOptionPane.showMessageDialog((Component) e.getSource(),
+                                          "Error saving job output.", "Error", 
+                                          JOptionPane.ERROR_MESSAGE);
+                    else
+                        JOptionPane.showMessageDialog((Component) e.getSource(),
+                                          "Job output saved.", "Success", 
+                                          JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+          });
+        bWrite.setVisible(false);
+        this.add(bWrite);
+        
         this.add(pane);
     }
         
@@ -616,6 +659,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
         labelTotal.setVisible(false);
         labelWaiting.setVisible(false);
         labelRunning.setVisible(false);
+        bWrite.setVisible(false);
     }
   
     /**
