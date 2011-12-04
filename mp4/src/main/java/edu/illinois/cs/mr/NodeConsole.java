@@ -13,6 +13,12 @@ import edu.illinois.cs.mr.jm.TaskStatus;
 import edu.illinois.cs.mr.util.ImmutableStatus;
 import edu.illinois.cs.mr.util.RPC;
 
+/**
+ * Console used to interact with a node. The console issues commands specified
+ * by users against the remote node.
+ * 
+ * @author benjamin
+ */
 public class NodeConsole {
 
     static enum Command {

@@ -38,12 +38,6 @@ public class FileSystem implements FileSystemService {
     }
 
     @Override
-    public boolean mkdir(Path path) throws IOException {
-        File file = resolve(path);
-        return file.mkdir();
-    }
-
-    @Override
     public boolean delete(Path path) throws IOException {
         File file = resolve(path);
         return file.delete();

@@ -271,11 +271,6 @@ public class Node implements NodeService {
     }
 
     @Override
-    public boolean mkdir(Path path) throws IOException {
-        return fileSystem.mkdir(path);
-    }
-
-    @Override
     public boolean delete(Path path) throws IOException {
         return fileSystem.delete(path);
     }

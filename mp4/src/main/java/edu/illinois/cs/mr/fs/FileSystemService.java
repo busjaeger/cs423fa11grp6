@@ -41,15 +41,6 @@ public interface FileSystemService {
     void write(Path path, InputStream is) throws IOException;
 
     /**
-     * Creates a directory at the given path.
-     * 
-     * @param path Path to the directory to create
-     * @return true if the directory was created successfully, false otherwise
-     * @throws IOException If an error occurred invoking this method remotely
-     */
-    boolean mkdir(Path path) throws IOException;
-
-    /**
      * Deletes the file or directory at the given path.
      * 
      * @param path Path to the file or folder to delete
