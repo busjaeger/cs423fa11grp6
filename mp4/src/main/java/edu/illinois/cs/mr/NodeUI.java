@@ -229,10 +229,11 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 String phaseid = ((String)node.getUserObject()).split(" ")[1];
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 ImmutableStatus<JobID> phase = js.getPhaseStatus(Phase.valueOf(phaseid));
-                if(phase.getState() !=null)
+                try {
                     labelState.setText("State: \t" + phase.getState());
-                else
+                } catch(Exception e) {
                     labelState.setText("State: \tWaiting");
+                }
                 labelState.setVisible(true);
                 labelMessage.setVisible(false);
                 labelDetail.setVisible(false);
@@ -373,7 +374,7 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
             }
         };
         
-        new Timer(1000, updateData).start();
+        new Timer(5000, updateData).start();
     }
   
     private void SetupFrame() {
