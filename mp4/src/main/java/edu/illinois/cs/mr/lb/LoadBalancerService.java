@@ -3,7 +3,8 @@ package edu.illinois.cs.mr.lb;
 import java.io.IOException;
 
 /**
- * Remote interface to the LoadBalancer
+ * Remote interface to the LoadBalancer. Accepts status updates from other nodes
+ * to schedule and migrate task attempts.
  * 
  * @author benjamin
  */

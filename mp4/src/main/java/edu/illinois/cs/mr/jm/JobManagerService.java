@@ -33,7 +33,8 @@ public interface JobManagerService {
      * implementing the output format. The class must extend
      * {@link edu.illinois.cs.mapreduce.api.OutputFormat}</li>
      * </ul>
-     * Jobs without
+     * The job jar can optionally include a job.properties file to provide
+     * configuration properties for the implemented extensions.
      * </p>
      * <p>
      * Depending on the node configuration, the job may be split into several
@@ -47,13 +48,39 @@ public interface JobManagerService {
      */
     JobID submitJob(File jarFile, File inputFile) throws IOException;
 
+    /**
+     * Returns all job IDs managed by this job manager
+     * 
+     * @return
+     * @throws IOException
+     */
     JobID[] getJobIDs() throws IOException;
 
+    /**
+     * Returns the job status for a given job.
+     * 
+     * @param jobID
+     * @return
+     * @throws IOException
+     */
     JobStatus getJobStatus(JobID jobID) throws IOException;
 
+    /**
+     * Writes the output for a given job to the given file location. Returns
+     * true if the job has succeeded and the file could be written.
+     * 
+     * @param jobID
+     * @param file
+     * @return
+     * @throws IOException
+     */
     boolean writeOutput(JobID jobID, File file) throws IOException;
 
     /**
+     * Called by the TaskExecutor to update the job manager with status for the
+     * attempts it is running on behalf of the job manager. The array is sorted
+     * by attempt ID.
+     * 
      * @param status
      * @param statuses must be sorted by {@link AttemptID}
      * @return

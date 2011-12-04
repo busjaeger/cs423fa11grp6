@@ -26,9 +26,9 @@ public class WaitingTaskSelectionPolicy implements SelectionPolicy {
                 for (AttemptStatus attempt : reverse(task.getAttemptStatuses())) {
                     NodeID runningOn = attempt.getTargetNodeID();
                     State state = attempt.getState();
-                    // if this task has a running/succeeded attempts on target
+                    // if this task has a running/succeeded attempts on another
                     // node, don't select it
-                    if (runningOn.equals(target) && state != FAILED && state != CANCELED)
+                    if (!runningOn.equals(source) && state != FAILED && state != CANCELED)
                         continue taskLoop;
 
                     // we found an attempt that's running on the source

@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?><diagram program="umlet" version="11.3">
+  <zoom_level>10</zoom_level>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>20</x>
+      <y>20</y>
+      <w>290</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>JobManagerService
+--
+submitJob(File, File) : JobID
+getJobIDs() : JobID[]
+getJobStatus(JobID) : JobStatus
+writeOutput(JobID, File) : boolean
+updateStatus(AttemptStatus[]) : boolean</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>100</x>
+      <y>440</y>
+      <w>190</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Job
+--
+dir : Path
+jarPath : Path
+descriptor : JobDescriptor
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>330</x>
+      <y>160</y>
+      <w>190</w>
+      <h>130</h>
+    </coordinates>
+    <panel_attributes>Status&lt;T&gt;
+--
+id : T
+state : State
+createdTime : long
+beginWaitingTime : long
+beginRunningTime : long
+doneTime : long</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>170</x>
+      <y>260</y>
+      <w>270</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>250;30;250;50;30;50;30;60</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>100</x>
+      <y>320</y>
+      <w>190</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>PhasedStatus&lt;T, E&gt;
+--
+phaseStatuses : Status&lt;T&gt;[]
+phase : E</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>130</x>
+      <y>360</y>
+      <w>122</w>
+      <h>100</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-
+m1=&lt;JobID,Phase&gt;</panel_attributes>
+    <additional_attributes>70;30;70;80</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>310</x>
+      <y>440</y>
+      <w>230</w>
+      <h>50</h>
+    </coordinates>
+    <panel_attributes>Task
+--
+attemptCounter : AtomicInteger</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>390</x>
+      <y>260</y>
+      <w>50</w>
+      <h>200</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-
+</panel_attributes>
+    <additional_attributes>30;30;30;180</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>290</x>
+      <y>530</y>
+      <w>140</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>MapTask
+--
+split : Split
+inputPath : Path</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>320</x>
+      <y>460</y>
+      <w>120</w>
+      <h>90</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>100;30;100;50;30;50;30;70</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>160</x>
+      <y>490</y>
+      <w>150</w>
+      <h>100</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=mapTasks</panel_attributes>
+    <additional_attributes>130;80;30;80;30;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>440</x>
+      <y>530</y>
+      <w>230</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>ReduceTask
+--
+inputPaths : List&lt;QualifiedPath&gt;</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>390</x>
+      <y>460</y>
+      <w>180</w>
+      <h>90</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>30;30;30;50;160;50;160;70</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>160</x>
+      <y>500</y>
+      <w>436</w>
+      <h>140</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=reduceTasks</panel_attributes>
+    <additional_attributes>390;100;390;120;30;120;30;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>620</x>
+      <y>440</y>
+      <w>230</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Attemp
+--
+outputPath : Path
+message : String
+targetNodeID : NodeID</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>390</x>
+      <y>260</y>
+      <w>360</w>
+      <h>200</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-
+</panel_attributes>
+    <additional_attributes>30;30;30;50;340;50;340;180</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>510</x>
+      <y>430</y>
+      <w>130</w>
+      <h>50</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;.
+m1=attempts</panel_attributes>
+    <additional_attributes>110;30;30;30</additional_attributes>
+  </element>
+</diagram>

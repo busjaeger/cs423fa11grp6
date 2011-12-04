@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><diagram program="umlet" version="11.3">
+  <zoom_level>10</zoom_level>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>20</x>
+      <y>10</y>
+      <w>330</w>
+      <h>60</h>
+    </coordinates>
+    <panel_attributes>TransferPolicy
+--
+isTransferNeeded(NodeStatus,
+           Iterable&lt;NodeStatus&gt;) : boolean</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>20</x>
+      <y>80</y>
+      <w>330</w>
+      <h>50</h>
+    </coordinates>
+    <panel_attributes>NodeSelectionPolicy
+--
+selectNode(Collection&lt;NodeStatus&gt;) : NodeID</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>20</x>
+      <y>150</y>
+      <w>330</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>LocationPolicy
+--
+getSourcePolicy() : NodeSelectionPolicy
+getTargetPolicy() : NodeSelectionPolicy</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>20</x>
+      <y>230</y>
+      <w>330</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>SelectionPolicy
+--
+selectAttempt(NodeID, NodeID,
+               Iterable&lt;JobStatus&gt;)</panel_attributes>
+    <additional_attributes/>
+  </element>
+</diagram>

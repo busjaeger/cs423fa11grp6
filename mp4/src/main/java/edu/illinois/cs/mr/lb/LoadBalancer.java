@@ -22,6 +22,10 @@ import edu.illinois.cs.mr.jm.JobStatus;
 import edu.illinois.cs.mr.te.TaskExecutor;
 import edu.illinois.cs.mr.util.CpuProfiler;
 
+/**
+ * @author benjamin
+ *
+ */
 public class LoadBalancer implements LoadBalancerService, NodeListener {
 
     private final NodeConfiguration config;
