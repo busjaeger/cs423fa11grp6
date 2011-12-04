@@ -1,0 +1,52 @@
+Tests on single core VMs, 2 GB RAM each, 1 Gbps VMware vNICs-vSwitch
+Underlying hardware: Intel Core i7 4 cores @ 3.07 GHz + HT (8 logical cores)
+==================
+
+Note 'default' is as follows (both nodes):
+0 throttle
+1 thread
+2000 task executor status interval
+2000 load balancer status update interval
+round robin bootstrap selection policy
+idle transfer policy
+score based location policy
+waiting task selection policy
+
+
+2.3 GB file
+1. Baseline - both nodes at 0 throttle, all defaults    413 sec
+2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    427 sec
+3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    466 sec
+4. Both nodes 2 threads, 0 throttle, all other defaults    422 sec
+5. Both nodes 5 threads, 0 throttle, all other defaults    463 sec
+6. LocalNodeSelectionPolicy, transfers allowed,all defaults    406 sec
+7. LocalNodeSelectionPolicy, never transfer, all defaults    354 sec
+8. Both nodes, cpu profiling and task executor update set 10s    376 sec
+9. IdlestNodeSelectionPolicy, all other defaults    349 sec
+10. BusiestNodeSelectionPolicy, all other defaults    314 sec
+
+
+70 MB file
+1. Baseline - both nodes at 0 throttle, all defaults    13 sec
+2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    12 sec
+3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    12 sec
+4. Both nodes 2 threads, 0 throttle, all other defaults    14 sec
+5. Both nodes 5 threads, 0 throttle, all other defaults    14 sec
+6. LocalNodeSelectionPolicy, transfers allowed,all defaults    18 sec
+7. LocalNodeSelectionPolicy, never transfer, all defaults    18 sec
+8. Both nodes, cpu profiling and task executor update set 10s    19 sec
+9. IdlestNodeSelectionPolicy, all other defaults    12 sec
+10. BusiestNodeSelectionPolicy, all other defaults    14 sec
+
+
+400 MB File
+1. Baseline - both nodes at 0 throttle, all defaults    67 sec
+2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    69 sec
+3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    57 sec
+4. Both nodes 2 threads, 0 throttle, all other defaults    57 sec
+5. Both nodes 5 threads, 0 throttle, all other defaults    62 sec
+6. LocalNodeSelectionPolicy, transfers allowed,all defaults    65 sec
+7. LocalNodeSelectionPolicy, never transfer, all defaults    57 sec
+8. Both nodes, cpu profiling and task executor update set 10s    69 sec
+9. IdlestNodeSelectionPolicy, all other defaults    60 sec
+10. BusiestNodeSelectionPolicy, all other defaults    71 sec
