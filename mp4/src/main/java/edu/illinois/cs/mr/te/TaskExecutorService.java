@@ -6,9 +6,8 @@ import java.util.concurrent.TimeoutException;
 
 import edu.illinois.cs.mr.jm.AttemptID;
 
-
 /**
- * Remote interface to TakManager
+ * Remote interface to the TaskExecutor
  * 
  * @author benjamin
  */
@@ -44,7 +43,14 @@ public interface TaskExecutorService {
      * @throws IOException
      */
     boolean delete(AttemptID id) throws IOException;
-    
+
+    /**
+     * Throttle the threads executing tasks. The throttle value represents the
+     * percentage at which the threads are to operate.
+     * 
+     * @param value
+     * @throws IOException
+     */
     void setThrottle(double value) throws IOException;
 
 }

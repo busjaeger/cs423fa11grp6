@@ -22,17 +22,11 @@ exists(Path) : boolean</panel_attributes>
       <x>260</x>
       <y>20</y>
       <w>220</w>
-      <h>130</h>
+      <h>50</h>
     </coordinates>
     <panel_attributes>Path
 --
-segments : String[]
---
-segments()
-last()
-beforeLast()
-append(String)
-length()</panel_attributes>
+segments : String[]</panel_attributes>
     <additional_attributes/>
   </element>
 </diagram>

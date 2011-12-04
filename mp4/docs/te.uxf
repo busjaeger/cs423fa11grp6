@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?><diagram program="umlet" version="11.3">
+  <zoom_level>10</zoom_level>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>10</x>
+      <y>10</y>
+      <w>310</w>
+      <h>100</h>
+    </coordinates>
+    <panel_attributes>TaskExecutorService
+--
+execute(TaskExecutorTask)
+cancel(AttemptID, long, TimeUnit) : boolean
+setThrottle(double)</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>360</x>
+      <y>290</y>
+      <w>200</w>
+      <h>100</h>
+    </coordinates>
+    <panel_attributes>TaskExecutorTask
+--
+jarPath : Path
+descriptor : JobDescriptor
+message : String</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>360</x>
+      <y>180</y>
+      <w>190</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Attempt
+--
+outputPath : Path
+message : String
+targetNodeID : NodeID</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>360</x>
+      <y>10</y>
+      <w>190</w>
+      <h>130</h>
+    </coordinates>
+    <panel_attributes>Status&lt;T&gt;
+--
+id : T
+state : State
+createdTime : long
+beginWaitingTime : long
+beginRunningTime : long
+doneTime : long</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>390</x>
+      <y>110</y>
+      <w>112</w>
+      <h>90</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-
+m1=&lt;AttemptID&gt;</panel_attributes>
+    <additional_attributes>60;30;60;70</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>430</x>
+      <y>230</y>
+      <w>50</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>30;30;30;60</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>220</x>
+      <y>430</y>
+      <w>220</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>TaskExecutorMapTask
+--
+split : Split
+inputPath : Path</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>470</x>
+      <y>430</y>
+      <w>230</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>TaskExecutorReduceTask
+--
+inputPaths : List&lt;QualifiedPath&gt;</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>290</x>
+      <y>360</y>
+      <w>180</w>
+      <h>90</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>160;30;30;70</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>420</x>
+      <y>360</y>
+      <w>180</w>
+      <h>90</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>30;30;160;70</additional_attributes>
+  </element>
+</diagram>

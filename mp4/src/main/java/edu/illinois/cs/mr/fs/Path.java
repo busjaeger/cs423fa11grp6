@@ -4,6 +4,13 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
 
+/**
+ * A simple serializable wrapper around a string array used to specify the
+ * location of files within a FileSystemService. This class is immutable and
+ * therefore inherently thread safe.
+ * 
+ * @author benjamin
+ */
 public class Path implements Serializable {
 
     private static final long serialVersionUID = 994529050146607958L;

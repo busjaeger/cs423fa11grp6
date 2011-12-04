@@ -108,7 +108,26 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         return executorService.getQueue().size();
     }
 
-    private long updateAverage() {
+    /**
+     * Callback for the TaskRunner to indicate that the given task has
+     * completed.
+     *
+     * @param task
+     * @return
+     */
+    synchronized long done(TaskExecutorTask task) {
+        this.currentCapacity++;
+        long runtime = task.getDoneTime() - task.getBeginRunningTime();
+        taskRuntimes[index] = runtime;
+        this.index = (index++) % this.taskRuntimes.length;
+        if (this.throttle == 0) {
+            return 0;
+        }
+        Long average = new Long(computeAverage());
+        return (long)((average.doubleValue() / (this.throttle / 100.0)) - average.doubleValue());
+    }
+
+    private long computeAverage() {
         long average = 0;
         for (long taskRuntime : this.taskRuntimes) {
             average += taskRuntime;
@@ -119,18 +138,9 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         return (long)((double)average / (double)this.taskRuntimes.length);
     }
 
-    public synchronized long done(TaskExecutorTask task) {
-        this.currentCapacity++;
-        long runtime = task.getDoneTime() - task.getBeginRunningTime();
-        taskRuntimes[index] = runtime;
-        this.index = (index++) % this.taskRuntimes.length;
-        if (this.throttle == 0) {
-            return 0;
-        }
-        Long average = new Long(this.updateAverage());
-        return (long)((average.doubleValue() / (this.throttle / 100.0)) - average.doubleValue());
-    }
-
+    /**
+     * @see edu.illinois.cs.mr.te.TaskExecutorService#execute(edu.illinois.cs.mr.te.TaskExecutorTask)
+     */
     @Override
     public void execute(TaskExecutorTask task) throws RemoteException {
         Semaphore completion = new Semaphore(0);
@@ -142,6 +152,10 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         }
     }
 
+    /**
+     * @see edu.illinois.cs.mr.te.TaskExecutorService#cancel(edu.illinois.cs.mr.jm.AttemptID,
+     *      long, java.util.concurrent.TimeUnit)
+     */
     @Override
     public boolean cancel(AttemptID id, long timeout, TimeUnit unit) throws IOException, TimeoutException {
         TaskExecution execution;
@@ -179,6 +193,9 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         return false;
     }
 
+    /**
+     * @see edu.illinois.cs.mr.te.TaskExecutorService#delete(edu.illinois.cs.mr.jm.AttemptID)
+     */
     @Override
     public boolean delete(AttemptID id) throws IOException {
         TaskExecution execution;
@@ -202,6 +219,11 @@ public class TaskExecutor implements TaskExecutorService, NodeListener {
         return true;
     }
 
+    /**
+     * Periodic update task to notify the job manager of execution results.
+     * 
+     * @author benjamin
+     */
     private class StatusUpdater implements Runnable {
         @Override
         public void run() {

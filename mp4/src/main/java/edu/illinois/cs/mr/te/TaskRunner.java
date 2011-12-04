@@ -32,6 +32,11 @@ import edu.illinois.cs.mr.jm.JobDescriptor;
 import edu.illinois.cs.mr.util.ReflectionUtil;
 import edu.illinois.cs.mr.util.Status.State;
 
+/**
+ * Runs map and reduce tasks
+ * 
+ * @author benjamin
+ */
 class TaskRunner implements Runnable {
 
     private final TaskExecutorTask task;
