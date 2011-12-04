@@ -23,6 +23,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 import javax.swing.JTree;
+import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.border.Border;
 import javax.swing.event.ChangeEvent;
@@ -97,14 +98,20 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                         for (Enumeration e = jobnode.children(); e.hasMoreElements() ;) {
                             phasenode = (DefaultMutableTreeNode) e.nextElement();
                             String phz = ((String)phasenode.getUserObject()).split(" ")[1];
-                            if(phz.equals(phase.name())) {
+                            String phasename = "";
+                            try {
+                                phasename = phase.name();
+                            } catch(Exception err) { }
+                            if(phz.equals(phasename)) {
                                 phasefound = true;
                                 break;
                             }
                         }
                         if(!phasefound) {
-                            phasenode = new DefaultMutableTreeNode("Phase " + phase.name());
-                            treeModel.insertNodeInto(phasenode, jobnode, jobnode.getChildCount());
+                            try {
+                                phasenode = new DefaultMutableTreeNode("Phase " + phase.name());
+                                treeModel.insertNodeInto(phasenode, jobnode, jobnode.getChildCount());
+                            } catch(Exception excp) { }
                         }
                         
                         for (TaskStatus task : job.getTaskStatuses(phase)) {
@@ -230,15 +237,22 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 ImmutableStatus<JobID> phase = js.getPhaseStatus(Phase.valueOf(phaseid));
                 try {
+                    if(phase.getState()==null)
+                        labelState.setText("State: \tNot Started");
+                    else
                     labelState.setText("State: \t" + phase.getState());
                 } catch(Exception e) {
-                    labelState.setText("State: \tWaiting");
+                    labelState.setText("State: \tNot Started");
                 }
                 labelState.setVisible(true);
                 labelMessage.setVisible(false);
                 labelDetail.setVisible(false);
                 bWrite.setVisible(false);
-                if(phase.isDone()) {
+                boolean phasedone = false;
+                try {
+                    phasedone = phase.isDone();
+                } catch (Exception e) { }
+                if(phasedone) {
                     labelTotal.setText("Total Time: \t" + GetTotalTime(phase));
                     labelTotal.setVisible(true);
                     labelWaiting.setText("Waiting Time: \t" + GetWaitTime(phase));
@@ -578,16 +592,13 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 }
                 else {
                     try {    
-                        JobID id = services.submitJob(fJar, fInput);
-                        JOptionPane.showMessageDialog((Component) e.getSource(), 
-                                      "Job " + id.getValue() + " submitted.",
-                                      "Job Submitted", JOptionPane.INFORMATION_MESSAGE);
-                        fJar= null;
-                        fInput = null;
+                        (new JobSubmitter(fJar, fInput, services)).execute();
                         tfJar.setText("");
                         tfInput.setText("");
+                        fJar= null;
+                        fInput = null;
                     }
-                    catch(IOException ioe) {
+                    catch(Exception ioe) {
                         JOptionPane.showMessageDialog((Component) e.getSource(),
                                       "Error submitting job.", "Error", 
                                       JOptionPane.ERROR_MESSAGE);
@@ -685,5 +696,39 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 tree.setSelectionPath(null);
                 ClearData();
         }
+    }
+}
+
+class JobSubmitter extends SwingWorker<JobID, Object> {
+    
+    private JobID id;
+    private File fJar, fInput;
+    NodeService services;
+    
+    public JobSubmitter(File jar, File input, NodeService service) {
+        id = null;
+        fJar = jar;
+        fInput = input;
+        services = service;
+    }
+    
+    @Override
+    public JobID doInBackground() {
+        try {
+            id = services.submitJob(fJar, fInput);
+            JOptionPane.showMessageDialog(null, 
+                              "Job " + id.getValue() + " submitted.",
+                              "Job Submitted", JOptionPane.INFORMATION_MESSAGE);
+        } catch(Exception e) {
+            JOptionPane.showMessageDialog(null,
+                                          "Error submitting job.", "Error", 
+                                          JOptionPane.ERROR_MESSAGE);
+        }
+
+        return id;
+    }
+
+    @Override
+    protected void done() {
     }
 }
