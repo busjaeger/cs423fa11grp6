@@ -115,27 +115,26 @@ public class JobManager implements JobManagerService, NodeListener {
      *      java.io.File)
      */
     @Override
-    public JobID submitJob(File jarFile, File inputFile) throws IOException {
+    public JobID submitJob(final File jarFile, final File inputFile) throws IOException {
         // 1. create job
         JobDescriptor descriptor = JobDescriptor.read(jarFile);
         JobID jobId = new JobID(config.nodeId, counter.incrementAndGet());
-        Job job = new Job(jobId, jarFile.getName(), descriptor);
+        final Job job = new Job(jobId, jarFile.getName(), descriptor);
         synchronized (jobs) {
             jobs.put(jobId, job);
         }
         // 2. submit tasks
-        try {
-            submitMapTasks(job, jarFile, inputFile);
-        } catch (Throwable t) {
-            job.setState(State.FAILED);
-            if (t instanceof IOException)
-                throw (IOException)t;
-            if (t instanceof RuntimeException)
-                throw (RuntimeException)t;
-            if (t instanceof Error)
-                throw (Error)t;
-            throw new RuntimeException(t);
-        }
+        node.getExecutorService().submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    submitMapTasks(job, jarFile, inputFile);
+                } catch (Throwable t) {
+                    job.setState(State.FAILED);
+                    t.printStackTrace();
+                }
+            }
+        });
         return jobId;
     }
 
@@ -369,7 +368,7 @@ public class JobManager implements JobManagerService, NodeListener {
                         try {
                             submitReduceTasks(job);
                         } catch (IOException e) {
-                            e.printStackTrace();
+                            job.setState(State.FAILED);
                         }
                     }
                 });
