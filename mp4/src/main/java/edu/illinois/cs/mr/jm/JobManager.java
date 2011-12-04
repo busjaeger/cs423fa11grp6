@@ -144,8 +144,8 @@ public class JobManager implements JobManagerService, NodeListener {
      * inputFile, but do not want to assume that it will still exist after
      * submitJob returns. I.e. a user is free to delete or edit the input file
      * after submitting the job. We also do not want to create a copy of the
-     * file, because we want to support very large input files, so splitting
-     * it directly is faster.
+     * file, because we want to support very large input files, so splitting it
+     * directly is faster.
      * </p>
      * <p>
      * Task attempts can be submitted as soon as the necessary data is copied
@@ -163,7 +163,7 @@ public class JobManager implements JobManagerService, NodeListener {
      * @throws InstantiationException
      * @throws ClassNotFoundException
      * @throws IOException
-     * @throws InterruptedException 
+     * @throws InterruptedException
      */
     private void submitMapTasks(Job job, File jarFile, File inputFile) throws IOException, InterruptedException {
         JobDescriptor descriptor = job.getDescriptor();
@@ -225,9 +225,9 @@ public class JobManager implements JobManagerService, NodeListener {
 
     /**
      * the only purpose of this complex chunk of code is to turn the
-     * OutputStream the splitter needs into an InputStream for the file
-     * system
-     * @throws InterruptedException 
+     * OutputStream the splitter needs into an InputStream for the file system
+     * 
+     * @throws InterruptedException
      */
     private Split writeSplit(final Splitter<?> splitter, Path inputPath, final FileSystemService fs)
         throws IOException, InterruptedException {
@@ -394,33 +394,36 @@ public class JobManager implements JobManagerService, NodeListener {
             throw new IllegalArgumentException("Can currently only transfer map tasks");
         MapTask task = (MapTask)job.getMapTask(taskId);
 
-        NodeID source = attempt.getTargetNodeID();
-        FileSystemService sourceFs = node.getFileSystemService(source);
-        FileSystemService targetFs = node.getFileSystemService(target);
-
-        // make sure jar is present
-        Path jarPath = job.getJarPath();
-        if (!targetFs.exists(jarPath))
-            targetFs.write(jarPath, sourceFs.read(jarPath));
-
-        // make sure input file is present
-        Path inputPath = task.getInputPath();
-        if (!targetFs.exists(inputPath))
-            targetFs.write(inputPath, sourceFs.read(inputPath));
-
-        // create a new attempt
+        // create and register new attempt
         AttemptID attemptID = task.nextAttemptID();
         Path outputPath = job.getDir().append(attemptID.toQualifiedString(1) + "-output");
         Attempt newAttempt = new Attempt(attemptID, target, outputPath);
         task.addAttempt(newAttempt);
 
-        submitMapTaskAttempt(job, task, newAttempt);
+        // cancel previous attempt
+        NodeID source = attempt.getTargetNodeID();
         try {
-            node.getTaskExecutorService(source).cancel(attempt.getId(), 10, TimeUnit.SECONDS);
+            if (!node.getTaskExecutorService(source).cancel(attempt.getId(), 10, TimeUnit.SECONDS))
+                System.out.println("failed cancel attempt " + attempt.getId() + " during task migration");
         } catch (TimeoutException e) {
             // ignore
             e.printStackTrace();
         }
+
+        // transfer files
+        FileSystemService sourceFs = node.getFileSystemService(source);
+        FileSystemService targetFs = node.getFileSystemService(target);
+        // jar
+        Path jarPath = job.getJarPath();
+        if (!targetFs.exists(jarPath))
+            targetFs.write(jarPath, sourceFs.read(jarPath));
+        // input file
+        Path inputPath = task.getInputPath();
+        if (!targetFs.exists(inputPath))
+            targetFs.write(inputPath, sourceFs.read(inputPath));
+
+        // submit newly created attempt
+        submitMapTaskAttempt(job, task, newAttempt);
         return;
     }
 }
