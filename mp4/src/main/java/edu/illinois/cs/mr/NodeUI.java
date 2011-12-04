@@ -229,8 +229,10 @@ public class NodeUI extends JFrame implements TreeSelectionListener {
                 String phaseid = ((String)node.getUserObject()).split(" ")[1];
                 JobStatus js = services.getJobStatus(JobID.fromQualifiedString(nodeId + "-" + jobid));
                 ImmutableStatus<JobID> phase = js.getPhaseStatus(Phase.valueOf(phaseid));
-
-                labelState.setText("State: \t" + phase.getState());
+                if(phase.getState() !=null)
+                    labelState.setText("State: \t" + phase.getState());
+                else
+                    labelState.setText("State: \tWaiting");
                 labelState.setVisible(true);
                 labelMessage.setVisible(false);
                 labelDetail.setVisible(false);
