@@ -15,7 +15,7 @@ import edu.illinois.cs.mapreduce.api.RecordReader;
 public class TextInputFormat extends InputFormat<Long, String, TextSplit> {
 
     private static final String LPP = "text.input.format.lines.per.split";
-    private static final String LPP_DEFAULT = "10000";
+    private static final String LPP_DEFAULT = "1000000";
 
     @Override
     public TextSplitter createSplitter(InputStream is, Properties properties) {

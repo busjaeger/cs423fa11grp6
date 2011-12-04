@@ -2,6 +2,8 @@ package edu.illinois.cs.mr.util;
 
 import static java.lang.Math.min;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -95,7 +97,7 @@ public class RPC {
                 Object result = null;
                 Method method = null;
                 try {
-                    ObjectInputStream is = new ObjectInputStream(socket.getInputStream());
+                    ObjectInputStream is = new ObjectInputStream(new BufferedInputStream(socket.getInputStream()));
                     try {
                         Invocation invocation = (Invocation)is.readObject();
                         method = serverInterface.getMethod(invocation.methodName, invocation.parameterClasses);
@@ -114,7 +116,7 @@ public class RPC {
                         error = t;
                     }
 
-                    ObjectOutputStream os = new ObjectOutputStream(socket.getOutputStream());
+                    ObjectOutputStream os = new ObjectOutputStream(new BufferedOutputStream(socket.getOutputStream()));
                     os.writeBoolean(error == null);
                     if (error != null) {
                         os.writeObject(error);
@@ -161,7 +163,8 @@ public class RPC {
             final Socket socket = new Socket(host, port);
             boolean close = true;
             try {
-                final ObjectOutputStream os = new ObjectOutputStream(socket.getOutputStream());
+                final ObjectOutputStream os =
+                    new ObjectOutputStream(new BufferedOutputStream(socket.getOutputStream()));
                 Invocation invocation = new Invocation(method.getName(), method.getParameterTypes());
                 os.writeObject(invocation);
                 if (args != null && args.length > 0) {
@@ -176,7 +179,7 @@ public class RPC {
                 }
                 os.flush();
 
-                final ObjectInputStream is = new ObjectInputStream(socket.getInputStream());
+                final ObjectInputStream is = new ObjectInputStream(new BufferedInputStream(socket.getInputStream()));
                 if (!is.readBoolean()) {
                     throw (Throwable)is.readObject();
                 }

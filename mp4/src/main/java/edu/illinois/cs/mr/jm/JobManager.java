@@ -1,5 +1,6 @@
 package edu.illinois.cs.mr.jm;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -168,7 +169,7 @@ public class JobManager implements JobManagerService, NodeListener {
     private void submitMapTasks(Job job, File jarFile, File inputFile) throws IOException, InterruptedException {
         JobDescriptor descriptor = job.getDescriptor();
         InputFormat<?, ?, ?> inputFormat = ReflectionUtil.newInstance(descriptor.getInputFormatClass(), jarFile);
-        InputStream is = new FileInputStream(inputFile);
+        InputStream is = new BufferedInputStream(new FileInputStream(inputFile));
         try {
             final Splitter<?> splitter = inputFormat.createSplitter(is, descriptor.getProperties());
             Set<NodeID> nodesWithJar = new HashSet<NodeID>();
@@ -189,7 +190,7 @@ public class JobManager implements JobManagerService, NodeListener {
 
                 // 4. write job file if not already written
                 if (!nodesWithJar.contains(targetNodeId)) {
-                    InputStream fis = new FileInputStream(jarFile);
+                    InputStream fis = new BufferedInputStream(new FileInputStream(jarFile));
                     try {
                         fs.write(job.getJarPath(), fis);
                     } finally {
@@ -234,7 +235,7 @@ public class JobManager implements JobManagerService, NodeListener {
         Split split;
         final PipedOutputStream pos = new PipedOutputStream();
         try {
-            final PipedInputStream pis = new PipedInputStream(pos);
+            final PipedInputStream pis = new PipedInputStream(pos, 8192);
             Future<Split> future = node.getExecutorService().submit(new Callable<Split>() {
                 @Override
                 public Split call() throws IOException {

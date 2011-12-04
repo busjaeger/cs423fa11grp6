@@ -1,5 +1,6 @@
 package edu.illinois.cs.mr.fs;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -43,7 +44,7 @@ public class FileSystem implements FileSystemService, NodeListener {
     @Override
     public InputStream read(Path path) throws IOException {
         File file = resolve(path);
-        return new FileInputStream(file);
+        return new BufferedInputStream(new FileInputStream(file));
     }
 
     /**
