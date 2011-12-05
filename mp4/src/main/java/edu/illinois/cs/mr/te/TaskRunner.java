@@ -8,6 +8,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -164,8 +165,12 @@ class TaskRunner implements Runnable {
             if (combiner != null) {
                 MapOutputContext<K, V> subContext = new MapOutputContext<K, V>(null, os);
                 try {
-                    for (Entry<K, List<V>> entry : map.entrySet())
+                    Iterator<Entry<K, List<V>>> it = map.entrySet().iterator();
+                    while (it.hasNext()) {
+                        Entry<K, List<V>> entry = it.next();
                         combiner.reduce(entry.getKey(), entry.getValue(), subContext);
+                        it.remove();
+                    }
                 } finally {
                     subContext.close();
                 }
