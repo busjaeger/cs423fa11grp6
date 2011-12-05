@@ -19,10 +19,10 @@ import edu.illinois.cs.mapreduce.api.Context;
 import edu.illinois.cs.mapreduce.api.InputFormat;
 import edu.illinois.cs.mapreduce.api.Mapper;
 import edu.illinois.cs.mapreduce.api.OutputFormat;
-import edu.illinois.cs.mapreduce.api.Split;
 import edu.illinois.cs.mapreduce.api.RecordReader;
 import edu.illinois.cs.mapreduce.api.RecordWriter;
 import edu.illinois.cs.mapreduce.api.Reducer;
+import edu.illinois.cs.mapreduce.api.Split;
 import edu.illinois.cs.mr.Node;
 import edu.illinois.cs.mr.fs.FileSystem;
 import edu.illinois.cs.mr.fs.FileSystemService;
@@ -38,6 +38,8 @@ import edu.illinois.cs.mr.util.Status.State;
  * @author benjamin
  */
 class TaskRunner implements Runnable {
+
+    private static final int OBJECT_CHUNKS = 1000;
 
     private final TaskExecutorTask task;
     private final Node node;
@@ -170,9 +172,14 @@ class TaskRunner implements Runnable {
             } else {
                 ObjectOutputStream oos = new ObjectOutputStream(os);
                 try {
+                    int chunk = OBJECT_CHUNKS;
                     for (Entry<K, List<V>> entry : map.entrySet()) {
                         oos.writeObject(entry.getKey());
                         oos.writeObject(entry.getValue());
+                        if (chunk-- == 0) {
+                            oos.reset();
+                            chunk = OBJECT_CHUNKS;
+                        }
                     }
                     oos.writeObject(null);// sentinel
                 } finally {
@@ -276,6 +283,7 @@ class TaskRunner implements Runnable {
                 pairs.add(null);
             Object[] lowest;
             int idx;
+            int chunk = OBJECT_CHUNKS;
             while (!iss.isEmpty()) {
                 lowest = null;
                 idx = -1;
@@ -286,6 +294,7 @@ class TaskRunner implements Runnable {
                         pair = new Object[2];
                         pair[0] = ois.readObject();
                         if (pair[0] == null) {
+                            ois.close();
                             iss.remove(i);
                             pairs.remove(i);
                             continue;
@@ -304,6 +313,11 @@ class TaskRunner implements Runnable {
                     os.writeObject(lowest[0]);
                     os.writeObject(lowest[1]);
                     pairs.set(idx, null);
+                }
+                if (chunk-- == 0) {
+                    os.flush();
+                    os.reset();
+                    chunk = OBJECT_CHUNKS;
                 }
             }
             os.writeObject(null);
