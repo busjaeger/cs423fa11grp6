@@ -1,5 +1,7 @@
-Tests on single core VMs, 2 GB RAM each, 1 Gbps VMware vNICs-vSwitch
-Underlying hardware: Intel Core i7 4 cores @ 3.07 GHz + HT (8 logical cores)
+Test Setup:
+Node 1: dual vCPU VM, 1.5 GB RAM, 1 Gbps VMware vNIC-vSwitch
+Node 2: single vCPU VM, 2.0 GB RAM, 1 Gbps VMware vNIC-vSwitch
+Underlying hardware: Intel Core i7 w/4 cores @ 3.07 GHz + HT (8 logical cores)
 ==================
 
 Note 'default' is as follows (both nodes):
@@ -11,9 +13,12 @@ round robin bootstrap selection policy
 idle transfer policy
 score based location policy
 waiting task selection policy
+1,000,000 lines per task
+
+All tests initiated on Node 1.
 
 
-2.3 GB file
+2.3 GB file (default = 57 tasks)
 1. Baseline - both nodes at 0 throttle, all defaults    413 sec
 2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    427 sec
 3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    466 sec
@@ -26,7 +31,7 @@ waiting task selection policy
 10. BusiestNodeSelectionPolicy, all other defaults    314 sec
 
 
-70 MB file
+70 MB file (default = 2 tasks)
 1. Baseline - both nodes at 0 throttle, all defaults    13 sec
 2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    12 sec
 3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    12 sec
@@ -37,9 +42,12 @@ waiting task selection policy
 8. Both nodes, cpu profiling and task executor update set 10s    19 sec
 9. IdlestNodeSelectionPolicy, all other defaults    12 sec
 10. BusiestNodeSelectionPolicy, all other defaults    14 sec
+11. Lines per task 100,000 (17 tasks), all other defaults	36 sec
+12. Lines per task 5,000,000 (1 task), all other defaults	13 sec
+13. Lines per task 10,000,000 (1 task), all other defaults	20 sec
 
 
-400 MB File
+400 MB File (default = 10 tasks)
 1. Baseline - both nodes at 0 throttle, all defaults    67 sec
 2. Node 1 @ 50 throttle, node 2 @ 0 throttle all defaults    69 sec
 3. Node 1 @ 100 throttle, node 2 @ 0 throttle, all defaults    57 sec
@@ -50,3 +58,5 @@ waiting task selection policy
 8. Both nodes, cpu profiling and task executor update set 10s    69 sec
 9. IdlestNodeSelectionPolicy, all other defaults    60 sec
 10. BusiestNodeSelectionPolicy, all other defaults    71 sec
+11. Lines per task 100,000 (98 tasks), all other defaults	203 sec
+12. Lines per task 5,000,000 (2 tasks), all other defaults	387 sec
