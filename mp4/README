@@ -1,5 +1,42 @@
 ##################################################
-To import the project into eclipse
+# Required tools
+##################################################
+jdk 6
+maven
+eclipse
+
+##################################################
+# Compile
+##################################################
+mvn install
+
+##################################################
+# run single node sample
+##################################################
+cd bin
+./start-node.sh &
+./gui.sh
+
+In the GUI:
+- for job jar select: src/test/resources/sample/job.jar
+- for input file select: src/test/resources/sample/rfc2616.txt
+- submit
+- select jobs/tasks/attempts to see status
+- once job completes: select job and 'save job output...'
+- stop node > yes
+
+##################################################
+# run multi node sample (both on localhost)
+##################################################
+cd bin
+./start-node.sh node1-local.properties &
+./start-node.sh node2-local.properties &
+./gui.sh
+
+same steps in GUI to submit tasks
+
+##################################################
+# To import the project into eclipse
 ##################################################
 - open a new shell
 - cd mp4
@@ -8,29 +45,4 @@ To import the project into eclipse
 - import existing project navigate to mp4
 - import 'docs/codestyle.xml' as eclipse Java code style
 
-##################################################
-To Run the sample from eclipse
-##################################################
 
-- open eclipse
-- import launch configurations: File > Import... > Run/Debug > Launch Configurations
-- browse to src/test/resources/sample
-- select all three (Node1.launch, Node2.launch, NodeConsole.launch)
-- launch the two Node launch configs
-- run NodeConsole launch config
-- verify output under /tmp/node1 and /tmp/node2
-
-##################################################
-Extensions implemented
-##################################################
-
-1. support for user-defined map reduce functions
-2. support custom input format for splitting input files and reading split records
-3. support for more than 2 nodes
-4. ability to execute arbitrary number of jobs concurrently on different nodes
-5. runtime properties configurable, e.g. number of threads, heartbeat interval etc.
-6. jobs configurable, e.g. input split size, output key/value separator
-7. console that can connect to to any node and execute commands
-8. display total time, wait time, running time for each job, task, and attempt
-9. bootstrap policy for initial task distribution
-10. pluggable policy framework
