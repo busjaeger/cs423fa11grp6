@@ -70,11 +70,13 @@ class TaskRunner implements Runnable {
     public void run() {
         try {
             task.setState(State.RUNNING);
+            long before = System.currentTimeMillis();
             init();
             if (task.isMap())
                 runMap((TaskExecutorMapTask)task);
             else
                 runReduce((TaskExecutorReduceTask)task);
+            System.out.println("total: "+(System.currentTimeMillis()-before));
             task.setState(State.SUCCEEDED);
         } catch (InterruptedException e) {
             task.setState(State.CANCELED);

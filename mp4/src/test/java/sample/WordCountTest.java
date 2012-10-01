@@ -21,6 +21,7 @@ import java.util.TreeMap;
 public class WordCountTest {
 
     public static void main(String[] args) throws IOException {
+        long before = System.currentTimeMillis();
         Map<String, Integer> counts = new TreeMap<String, Integer>();
 
         File file = new File(args[0]);
@@ -50,5 +51,6 @@ public class WordCountTest {
         } finally {
             writer.close();
         }
+        System.out.println("Done: "+(System.currentTimeMillis() - before));
     }
 }
